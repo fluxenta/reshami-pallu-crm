@@ -37,8 +37,11 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const collections = await shopifyCollection.list(250);
-    const titles = collections.map((c: any) => c.title);
-    return NextResponse.json({ collections: titles });
+    // De-duplicate by unique ID
+    const unique = Array.from(new Map(collections.map(c => [c.id, c])).values());
+    // Filter out collections with 0 sarees
+    const active = unique.filter((c: any) => c.productsCount > 0);
+    return NextResponse.json({ collections: active });
   } catch (err: any) {
     console.error("Collections API GET failure:", err);
     return NextResponse.json({ error: err.message || "Failed to fetch collections" }, { status: 500 });

@@ -1,10 +1,54 @@
 import crypto from "crypto";
 const domain = process.env.SHOPIFY_STORE_DOMAIN || 'reshmi-pallu.myshopify.com';
-const token = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 const apiVersion = process.env.SHOPIFY_API_VERSION || '2026-04';
 
-if (!token) {
-  throw new Error("Missing SHOPIFY_ADMIN_ACCESS_TOKEN environment variable in .env.local");
+let cachedToken: string | null = null;
+let tokenExpiryTime = 0;
+
+async function getAdminToken(): Promise<string> {
+  const now = Date.now();
+  // If we have a cached token and it hasn't expired yet (with a 5-minute safety buffer)
+  if (cachedToken && tokenExpiryTime > now + 300000) {
+    return cachedToken;
+  }
+
+  const clientId = process.env.SHOPIFY_CLIENT_ID;
+  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+
+  if (clientId && clientSecret) {
+    try {
+      console.log("[Shopify Admin] Requesting fresh access token...");
+      const res = await fetch(`https://${domain}/admin/oauth/access_token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: clientId,
+          client_secret: clientSecret,
+        }),
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to fetch access token: ${res.status} ${text}`);
+      }
+
+      const data = await res.json();
+      if (data.access_token) {
+        cachedToken = data.access_token;
+        const expiresIn = data.expires_in || 86390;
+        tokenExpiryTime = now + expiresIn * 1000;
+        console.log("[Shopify Admin] Token refreshed successfully.");
+        return cachedToken!;
+      }
+    } catch (err) {
+      console.error("[Shopify Admin] Failed to refresh token, falling back to static env token:", err);
+    }
+  }
+
+  // Fallback to static env token
+  return process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "";
 }
 
 const endpoint = `https://${domain}/admin/api/${apiVersion}/graphql.json`;
@@ -23,9 +67,10 @@ export async function shopifyAdminFetch<T>({
   variables?: Record<string, unknown>;
   cache?: RequestCache;
 }): Promise<T> {
+  const activeToken = await getAdminToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Shopify-Access-Token': token || '',
+    'X-Shopify-Access-Token': activeToken,
   };
 
   try {
@@ -127,7 +172,7 @@ const PRODUCT_FRAGMENT = `
             inventoryLevels(first: 1) {
               edges {
                 node {
-                  quantities(names: ["on_hand"]) {
+                  quantities(names: ["available"]) {
                     name
                     quantity
                   }
@@ -148,7 +193,8 @@ const PRODUCT_FRAGMENT = `
     region: metafield(namespace: "saree", key: "region") { value }
     blouseIncluded: metafield(namespace: "saree", key: "blouse_included") { value }
     blouseLength: metafield(namespace: "saree", key: "blouse_length") { value }
-    washCare: metafield(namespace: "saree", key: "wash_care") { value }
+    washCareV2: metafield(namespace: "saree", key: "wash_care_v2") { value }
+    washCareLegacy: metafield(namespace: "saree", key: "wash_care") { value }
     shortVideo: metafield(namespace: "saree", key: "short_video") {
       value
       reference {
@@ -168,7 +214,7 @@ const PRODUCT_FRAGMENT = `
 function mapShopifyProduct(node: any): SareeProduct {
   const variantEdge = node.variants?.edges?.[0]?.node;
   const invLevelEdge = variantEdge?.inventoryItem?.inventoryLevels?.edges?.[0]?.node;
-  const onHandQty = invLevelEdge?.quantities?.find((q: any) => q.name === "on_hand")?.quantity || 0;
+  const availableQty = invLevelEdge?.quantities?.find((q: any) => q.name === "available")?.quantity || 0;
 
   // Extract short video
   let shortVideoData;
@@ -201,7 +247,7 @@ function mapShopifyProduct(node: any): SareeProduct {
     sku: variantEdge?.sku || '',
     price: parseFloat(variantEdge?.price || '0'),
     compareAtPrice: variantEdge?.compareAtPrice ? parseFloat(variantEdge.compareAtPrice) : null,
-    stock: onHandQty,
+    stock: availableQty,
     locationId: invLevelEdge?.location?.id,
     inventoryItemId: variantEdge?.inventoryItem?.id,
     metafields: {
@@ -212,7 +258,7 @@ function mapShopifyProduct(node: any): SareeProduct {
       region: node.region?.value,
       blouseIncluded: node.blouseIncluded?.value === 'true',
       blouseLength: node.blouseLength?.value,
-      washCare: node.washCare?.value,
+      washCare: node.washCareV2?.value || node.washCareLegacy?.value,
       shortVideo: shortVideoData,
       foundersExclusive: node.foundersExclusive?.value === 'true',
     }
@@ -299,7 +345,7 @@ export const shopifySaree = {
       { namespace: "saree", key: "region", value: saree.metafields.region || '', type: "single_line_text_field" },
       { namespace: "saree", key: "blouse_included", value: saree.metafields.blouseIncluded ? 'true' : 'false', type: "single_line_text_field" },
       { namespace: "saree", key: "blouse_length", value: saree.metafields.blouseLength || '', type: "single_line_text_field" },
-      { namespace: "saree", key: "wash_care", value: saree.metafields.washCare || '', type: "single_line_text_field" },
+      { namespace: "saree", key: "wash_care_v2", value: saree.metafields.washCare || '', type: "multi_line_text_field" },
       { namespace: "saree", key: "founders_exclusive", value: saree.metafields.foundersExclusive ? 'true' : 'false', type: "single_line_text_field" },
     ].filter(m => m.value !== '');
 
@@ -321,15 +367,15 @@ export const shopifySaree = {
 
     // Prepare media array if shortVideo media ID is available
     const media = [];
-    if (saree.metafields.shortVideo?.id) {
-      // For Shopify media creation, use the uploaded media ID as originalSource
-      media.push({ originalSource: saree.metafields.shortVideo.id, mediaContentType: "VIDEO" });
+    if (saree.metafields.shortVideo?.id && saree.metafields.shortVideo?.url) {
+      // For Shopify media creation, use the uploaded media URL as originalSource
+      media.push({ originalSource: saree.metafields.shortVideo.url, mediaContentType: "VIDEO" });
     }
 
     if ((saree as any).images && Array.isArray((saree as any).images)) {
       for (const img of (saree as any).images) {
         if (img.url) {
-          media.push({ originalSource: (img.id && img.id.startsWith("gid://")) ? img.id : img.url, mediaContentType: "IMAGE" });
+          media.push({ originalSource: img.url, mediaContentType: "IMAGE" });
         }
       }
     }
@@ -363,26 +409,8 @@ export const shopifySaree = {
     await this.addProductToCollections(createdProductDetails.id, tags);
     await this.ensurePublished(createdProductDetails.id);
 
-    // If media was uploaded, set the first media as the featured image (fallback to fresh fetch if needed)
-    if (media && media.length > 0) {
-      // Try using the media ID returned from creation (if present)
-      const freshProduct = await this.get(createdProductDetails.id);
-      const createdMediaId = (freshProduct as any)?.media?.edges?.[0]?.node?.id || (res.productCreate.product.media?.edges?.[0]?.node?.id);
-      
-      if (createdMediaId) {
-        const imageUpdateMutation = `
-          mutation setFeaturedImage($id: ID!, $imageId: ID!) {
-            productUpdate(input: { id: $id, featuredImageId: $imageId }) {
-              product { id featuredImage { id url } }
-              userErrors { field message }
-            }
-          }
-        `;
-        await shopifyAdminFetch<{ productUpdate: { product: any, userErrors: Array<{message:string}> } }>(
-          { query: imageUpdateMutation, variables: { id: createdProductDetails.id, imageId: createdMediaId } }
-        );
-      }
-    }
+    // Note: Shopify automatically sets the first media image uploaded as the featured image.
+    // The previous featuredImageId mutation is unsupported by Shopify's modern ProductInput object.
 
     if (defaultVariantId) {
       const variantMutation = `
@@ -575,7 +603,7 @@ export const shopifySaree = {
       if (m.region !== undefined) metafields.push({ namespace: "saree", key: "region", value: m.region, type: "single_line_text_field" });
       if (m.blouseIncluded !== undefined) metafields.push({ namespace: "saree", key: "blouse_included", value: m.blouseIncluded ? 'true' : 'false', type: "single_line_text_field" });
       if (m.blouseLength !== undefined) metafields.push({ namespace: "saree", key: "blouse_length", value: m.blouseLength, type: "single_line_text_field" });
-      if (m.washCare !== undefined) metafields.push({ namespace: "saree", key: "wash_care", value: m.washCare, type: "single_line_text_field" });
+      if (m.washCare !== undefined) metafields.push({ namespace: "saree", key: "wash_care_v2", value: m.washCare, type: "multi_line_text_field" });
       if (m.foundersExclusive !== undefined) metafields.push({ namespace: "saree", key: "founders_exclusive", value: m.foundersExclusive ? 'true' : 'false', type: "single_line_text_field" });
       
       if (m.shortVideo?.id) {
@@ -929,6 +957,7 @@ export interface SareeCollection {
   title: string;
   handle: string;
   productsCount: number;
+  rules?: Array<{ column: string; relation: string; condition: string }>;
 }
 
 export const shopifyCollection = {
@@ -945,6 +974,13 @@ export const shopifyCollection = {
               productsCount {
                 count
               }
+              ruleSet {
+                rules {
+                  column
+                  relation
+                  condition
+                }
+              }
             }
           }
         }
@@ -957,12 +993,16 @@ export const shopifyCollection = {
         variables: { first: limit }
       });
 
-      return res.collections.edges.map(edge => ({
+      const mapped = res.collections.edges.map(edge => ({
         id: edge.node.id,
         title: edge.node.title,
         handle: edge.node.handle,
-        productsCount: edge.node.productsCount?.count || 0
+        productsCount: edge.node.productsCount?.count || 0,
+        rules: edge.node.ruleSet?.rules || []
       }));
+      
+      // De-duplicate by title to prevent Shopify duplicate collections with same name
+      return Array.from(new Map(mapped.map(c => [c.title.trim().toLowerCase(), c])).values());
     } catch (err) {
       console.error("Failed to list collections:", err);
       return [];
@@ -1060,7 +1100,8 @@ export const shopifyOrder = {
                 }
               }
               shippingAddress {
-                fullName
+                firstName
+                lastName
                 address1
                 address2
                 city

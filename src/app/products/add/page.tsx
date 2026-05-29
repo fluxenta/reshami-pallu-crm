@@ -65,16 +65,31 @@ export default function AddProductPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [video, setVideo] = useState<{ id: string, url: string } | null>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [mediaStatuses, setMediaStatuses] = useState<Record<string, { status: string, error?: string | null }>>({});
+  const [existingTags, setExistingTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/collections")
+      .then(res => res.json())
+      .then(data => {
+        const colls = data.collections || [];
+        const tags = colls
+          .map((c: any) => c.rules?.find((r: any) => r.column === "TAG")?.condition)
+          .filter((t: any): t is string => Boolean(t) && t !== "Founders-Exclusive");
+        setExistingTags(Array.from(new Set(tags)));
+      })
+      .catch(() => {});
+  }, []);
 
   // Metafields
-  const [fabric, setFabric] = useState("Pure Silk");
-  const [weave, setWeave] = useState("Kadhua");
-  const [colorFamily, setColorFamily] = useState("Red");
-  const [occasion, setOccasion] = useState("Bridal");
-  const [region, setRegion] = useState("Banaras");
+  const [fabric, setFabric] = useState("");
+  const [weave, setWeave] = useState("");
+  const [colorFamily, setColorFamily] = useState("");
+  const [occasion, setOccasion] = useState("");
+  const [region, setRegion] = useState("");
   const [blouseIncluded, setBlouseIncluded] = useState(true);
   const [blouseLength, setBlouseLength] = useState("0.8 meters");
-  const [washCare, setWashCare] = useState("Dry Clean Only");
+  const [washCare, setWashCare] = useState("");
   const [foundersExclusive, setFoundersExclusive] = useState(false);
   const [privateNotes, setPrivateNotes] = useState("");
 
@@ -93,11 +108,11 @@ export default function AddProductPage() {
   const [customColorFamily, setCustomColorFamily] = useState("");
 
   // Dynamic selector options
-  const regionOptions = ["Banaras", "Kanchipuram", "Chanderi", "Kalamkari", "Mysore", ...customRegions, "Other"];
-  const colorFamilyOptions = ["Red", "Blue", "Green", "Gold", "Silver", "Pink", "White", "Black", "Maroon", "Purple", "Cream", "Orange", "Yellow", "Turquoise", ...customColorFamilies, "Other"];
-  const fabricOptions = ["Pure Katan Silk", "Pure Silk", "Chanderi Silk", "Georgette", "Organza", "Tissue Silk", "Cotton", ...customFabrics, "Other"];
-  const weaveOptions = ["Kadhua", "Jamdani", "Ikat", "Meenakari", "Fekwa", ...customWeaves, "Other"];
-  const occasionOptions = ["Bridal", "Festive", "Cocktail", "Casual", ...customOccasions, "Other"];
+  const regionOptions = Array.from(new Set(["Banaras", "Kanchipuram", "Chanderi", "Kalamkari", "Mysore", ...customRegions, "Other"])).filter(Boolean) as string[];
+  const colorFamilyOptions = Array.from(new Set(["Red", "Blue", "Green", "Gold", "Silver", "Pink", "White", "Black", "Maroon", "Purple", "Cream", "Orange", "Yellow", "Turquoise", ...customColorFamilies, "Other"])).filter(Boolean) as string[];
+  const fabricOptions = Array.from(new Set(["Pure Katan Silk", "Pure Silk", "Chanderi Silk", "Georgette", "Organza", "Tissue Silk", "Cotton", ...customFabrics, "Other"])).filter(Boolean) as string[];
+  const weaveOptions = Array.from(new Set(["Kadhua", "Jamdani", "Ikat", "Meenakari", "Fekwa", ...customWeaves, "Other"])).filter(Boolean) as string[];
+  const occasionOptions = Array.from(new Set(["Bridal", "Festive", "Cocktail", "Casual", ...customOccasions, "Other"])).filter(Boolean) as string[];
 
   // SKU Generation logic
   const [sku, setSku] = useState("");
@@ -193,6 +208,7 @@ export default function AddProductPage() {
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
       setImages(prev => [...prev, data]);
+      setMediaStatuses(prev => ({ ...prev, [data.id]: { status: "queued" } }));
     } catch (err) {
       alert("Image upload failed: " + (err as Error).message);
     } finally {
@@ -218,6 +234,7 @@ export default function AddProductPage() {
       if (!res.ok) throw new Error("Video upload failed");
       const data = await res.json();
       setVideo(data);
+      setMediaStatuses(prev => ({ ...prev, [data.id]: { status: "queued" } }));
     } catch (err) {
       alert("Video upload failed: " + (err as Error).message);
     } finally {
@@ -225,8 +242,44 @@ export default function AddProductPage() {
     }
   };
 
+  // Poll media queue statuses
+  useEffect(() => {
+    const activeIds = Object.keys(mediaStatuses).filter(
+      (id) => mediaStatuses[id].status === "queued" || mediaStatuses[id].status === "processing"
+    );
+
+    if (activeIds.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const id of activeIds) {
+        try {
+          const res = await fetch(`/api/upload/status?id=${id}`);
+          if (res.ok) {
+            const data = await res.json();
+            setMediaStatuses((prev) => ({
+              ...prev,
+              [id]: { status: data.status, error: data.error },
+            }));
+          }
+        } catch (err) {
+          console.error("Failed to fetch media status:", err);
+        }
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [mediaStatuses]);
+
+  const isMediaSyncing = Object.values(mediaStatuses).some(
+    (item) => item.status === "queued" || item.status === "processing"
+  );
+
   // Tag Management
   const addTag = () => {
+    if (tags.length >= 3) {
+      alert("❌ You can add a maximum of 3 tags to a particular Saree.");
+      return;
+    }
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       setTags([...tags, newTag.trim()]);
       setNewTag("");
@@ -247,6 +300,23 @@ export default function AddProductPage() {
     const finalWeave = weave === "Other" ? customWeave.trim() : weave;
     const finalOccasion = occasion === "Other" ? customOccasion.trim() : occasion;
     const finalColorFamily = colorFamily === "Other" ? customColorFamily.trim() : colorFamily;
+
+    // Check mandatory fields
+    if (!finalColorFamily) {
+      alert("❌ Error: Colour is mandatory. Please select a color.");
+      setLoading(false);
+      return;
+    }
+    if (!finalFabric) {
+      alert("❌ Error: Fabric Type is mandatory. Please select a fabric.");
+      setLoading(false);
+      return;
+    }
+    if (!finalOccasion) {
+      alert("❌ Error: Occasion Curation is mandatory. Please select an occasion.");
+      setLoading(false);
+      return;
+    }
 
     if (
       (region === "Other" && !finalRegion) ||
@@ -522,8 +592,12 @@ export default function AddProductPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {/* Region */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70">Region of Origin</label>
+                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70 flex items-center gap-1">
+                    Region of Origin
+                    <span className="text-[10px] text-[#1A1A1A]/40 font-normal lowercase">(Optional)</span>
+                  </label>
                   <select value={region} onChange={(e) => setRegion(e.target.value)} className="glass-input bg-white">
+                    <option value="">None Selected</option>
                     {regionOptions.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                   {region === "Other" && (
@@ -540,8 +614,12 @@ export default function AddProductPage() {
 
                 {/* Color Family */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70">Color Family</label>
-                  <select value={colorFamily} onChange={(e) => setColorFamily(e.target.value)} className="glass-input bg-white">
+                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70 flex items-center gap-1">
+                    Color Family
+                    <span className="text-[10px] text-red-500 font-bold">* Required</span>
+                  </label>
+                  <select value={colorFamily} onChange={(e) => setColorFamily(e.target.value)} className="glass-input bg-white border-red-500/20">
+                    <option value="">None Selected</option>
                     {colorFamilyOptions.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   {colorFamily === "Other" && (
@@ -558,8 +636,12 @@ export default function AddProductPage() {
 
                 {/* Fabric */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70">Fabric Type</label>
-                  <select value={fabric} onChange={(e) => setFabric(e.target.value)} className="glass-input bg-white">
+                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70 flex items-center gap-1">
+                    Fabric Type
+                    <span className="text-[10px] text-red-500 font-bold">* Required</span>
+                  </label>
+                  <select value={fabric} onChange={(e) => setFabric(e.target.value)} className="glass-input bg-white border-red-500/20">
+                    <option value="">None Selected</option>
                     {fabricOptions.map(f => <option key={f} value={f}>{f}</option>)}
                   </select>
                   {fabric === "Other" && (
@@ -576,8 +658,12 @@ export default function AddProductPage() {
 
                 {/* Weave */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70">Weave Style</label>
+                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70 flex items-center gap-1">
+                    Weave Style
+                    <span className="text-[10px] text-[#1A1A1A]/40 font-normal lowercase">(Optional)</span>
+                  </label>
                   <select value={weave} onChange={(e) => setWeave(e.target.value)} className="glass-input bg-white">
+                    <option value="">None Selected</option>
                     {weaveOptions.map(w => <option key={w} value={w}>{w}</option>)}
                   </select>
                   {weave === "Other" && (
@@ -594,8 +680,12 @@ export default function AddProductPage() {
 
                 {/* Occasion */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70">Occasion Curation</label>
-                  <select value={occasion} onChange={(e) => setOccasion(e.target.value)} className="glass-input bg-white">
+                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70 flex items-center gap-1">
+                    Occasion Curation
+                    <span className="text-[10px] text-red-500 font-bold">* Required</span>
+                  </label>
+                  <select value={occasion} onChange={(e) => setOccasion(e.target.value)} className="glass-input bg-white border-red-500/20">
+                    <option value="">None Selected</option>
                     {occasionOptions.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                   {occasion === "Other" && (
@@ -638,7 +728,13 @@ export default function AddProductPage() {
                 {/* Wash Care */}
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-bold uppercase text-[#1A1A1A]/70">Wash Care</label>
-                  <input type="text" value={washCare} onChange={(e) => setWashCare(e.target.value)} className="glass-input" />
+                  <textarea
+                    value={washCare}
+                    onChange={(e) => setWashCare(e.target.value)}
+                    rows={3}
+                    className="glass-input resize-none"
+                    placeholder="e.g. Dry clean preferred. Do not machine wash..."
+                  />
                 </div>
 
                 {/* Tag insertion */}
@@ -656,6 +752,29 @@ export default function AddProductPage() {
                       <Plus size={14} />
                     </button>
                   </div>
+                  {existingTags.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">
+                      <span className="text-[10px] text-[#1A1A1A]/50 font-bold uppercase">Quick Add:</span>
+                      {existingTags.map(tagSuggestion => (
+                        <button
+                          key={tagSuggestion}
+                          type="button"
+                          onClick={() => {
+                            if (tags.length >= 3) {
+                              alert("❌ You can add a maximum of 3 tags to a particular Saree.");
+                              return;
+                            }
+                            if (!tags.includes(tagSuggestion)) {
+                              setTags([...tags, tagSuggestion]);
+                            }
+                          }}
+                          className="bg-[#4A154B]/5 hover:bg-[#4A154B]/10 border border-[#4A154B]/10 rounded-full px-2.5 py-0.5 text-[10px] text-[#4A154B] font-semibold transition cursor-pointer"
+                        >
+                          + {tagSuggestion}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -705,19 +824,35 @@ export default function AddProductPage() {
                   {/* Previews of uploaded images */}
                   {images.length > 0 && (
                     <div className="grid grid-cols-3 gap-3 w-full mt-4">
-                      {images.map((img, index) => (
-                        <div key={img.id || index} className="relative aspect-[2/3] rounded-lg overflow-hidden border border-[#4A154B]/10 bg-[#FAF8F5]">
-                          <img src={img.url} alt={`Uploaded ${index + 1}`} className="object-cover w-full h-full" />
-                          <button
-                            type="button"
-                            onClick={() => setImages(prev => prev.filter((_, i) => i !== index))}
-                            className="absolute top-1.5 right-1.5 bg-red-500 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md cursor-pointer"
-                            aria-label="Remove image"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+                      {images.map((img, index) => {
+                        const status = mediaStatuses[img.id]?.status || "ready";
+                        const isSyncing = status === "queued" || status === "processing";
+                        const isFailed = status === "failed";
+                        return (
+                          <div key={img.id || index} className="relative aspect-[2/3] rounded-lg overflow-hidden border border-[#4A154B]/10 bg-[#FAF8F5]">
+                            <img src={img.url} alt={`Uploaded ${index + 1}`} className="object-cover w-full h-full" />
+                            {isSyncing && (
+                              <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-center p-2">
+                                <span className="text-[10px] font-bold text-white uppercase animate-pulse">Syncing...</span>
+                                <span className="text-[9px] text-white/80 mt-0.5">{status === "queued" ? "Queued" : "Optimizing"}</span>
+                              </div>
+                            )}
+                            {isFailed && (
+                              <div className="absolute inset-0 bg-red-900/80 flex flex-col items-center justify-center text-center p-2 text-white">
+                                <span className="text-[10px] font-bold uppercase">Failed</span>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setImages(prev => prev.filter((_, i) => i !== index))}
+                              className="absolute top-1.5 right-1.5 bg-red-500 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md cursor-pointer z-10"
+                              aria-label="Remove image"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -735,11 +870,11 @@ export default function AddProductPage() {
                     </span>
                     
                     <input 
-                      type="file" 
-                      accept="video/mp4" 
-                      onChange={handleVideoUpload} 
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                      disabled={uploadingVideo}
+                       type="file" 
+                       accept="video/mp4" 
+                       onChange={handleVideoUpload} 
+                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                       disabled={uploadingVideo}
                     />
 
                     {uploadingVideo && <div className="text-xs text-[#4A154B] font-semibold animate-pulse">Uploading Looping Video...</div>}
@@ -750,10 +885,34 @@ export default function AddProductPage() {
                     <div className="mt-4 flex flex-col items-center">
                       <div className="relative aspect-[9/16] w-[140px] rounded-lg overflow-hidden border border-[#4A154B]/10 bg-[#FAF8F5] shadow-sm">
                         <video src={video.url} controls muted loop playsInline className="object-cover w-full h-full" />
+                        {(() => {
+                          const status = mediaStatuses[video.id]?.status || "ready";
+                          const isSyncing = status === "queued" || status === "processing";
+                          const isFailed = status === "failed";
+                          if (isSyncing) {
+                            return (
+                              <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-center p-2">
+                                <span className="text-[11px] font-bold text-white uppercase animate-pulse">Worker Syncing...</span>
+                                <span className="text-[10px] text-white/80 mt-0.5">{status === "queued" ? "Queued in Redis" : "Optimizing Bitrates"}</span>
+                              </div>
+                            );
+                          }
+                          if (isFailed) {
+                            return (
+                              <div className="absolute inset-0 bg-red-950/80 flex flex-col items-center justify-center text-center p-2 text-white">
+                                <span className="text-[11px] font-bold uppercase">Sync Failed</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                         <button
                           type="button"
-                          onClick={() => setVideo(null)}
-                          className="absolute top-1.5 right-1.5 bg-red-500 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md cursor-pointer"
+                          onClick={() => {
+                            setVideo(null);
+                            setFoundersExclusive(false);
+                          }}
+                          className="absolute top-1.5 right-1.5 bg-red-500 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md cursor-pointer z-10"
                           aria-label="Remove video"
                         >
                           ×
@@ -780,13 +939,14 @@ export default function AddProductPage() {
                 <input
                   type="checkbox"
                   id="foundersExclusive"
+                  disabled={!video}
                   checked={foundersExclusive}
                   onChange={(e) => setFoundersExclusive(e.target.checked)}
-                  className="w-5 h-5 accent-[#4A154B] rounded cursor-pointer"
+                  className="w-5 h-5 accent-[#4A154B] rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 />
                 <div>
                   <label htmlFor="foundersExclusive" className="text-sm font-bold text-[#4A154B] cursor-pointer flex items-center gap-1">
-                    Mark as "Founder's Exclusive" Curation
+                    Mark as "Founder's Exclusive" Curation {!video && <span className="text-[10px] text-red-500 font-normal ml-2">(Requires Video Upload)</span>}
                   </label>
                   <p className="text-xs text-[#1A1A1A]/60 mt-0.5">
                     Ticking this adds the `Founders-Exclusive` tag and automatically groups this product into the exclusive curation rows on your storefront!
@@ -808,16 +968,25 @@ export default function AddProductPage() {
             </div>
 
             {/* Footer Form Submissions */}
-            <div className="flex justify-end p-4">
+            <div className="flex flex-col items-end gap-3 p-4 w-full">
+              {isMediaSyncing && (
+                <div className="bg-[#fffbeb] border border-[#f59e0b]/30 text-[#92400e] text-xs p-3.5 rounded-xl flex items-center gap-2 animate-pulse w-full justify-center">
+                  <span className="text-sm">⚠️</span>
+                  <span>
+                    <strong>Media Worker:</strong> Optimizing and syncing high-definition video/image assets to Shopify CDN. Please wait for completion before saving to prevent broken media links.
+                  </span>
+                </div>
+              )}
               <button
                 type="submit"
-                disabled={loading || uploadingImage || uploadingVideo}
-                className={`btn-primary py-3 px-8 text-xs uppercase tracking-wider font-semibold shadow-md flex items-center gap-1.5 ${(loading || uploadingImage || uploadingVideo) ? "opacity-60 cursor-not-allowed" : ""}`}
+                disabled={loading || uploadingImage || uploadingVideo || isMediaSyncing}
+                className={`btn-primary py-3 px-8 text-xs uppercase tracking-wider font-semibold shadow-md flex items-center gap-1.5 ${(loading || uploadingImage || uploadingVideo || isMediaSyncing) ? "opacity-60 cursor-not-allowed" : ""}`}
               >
                 <Save size={14} />
                 {loading ? "Publishing Saree..." : 
                  uploadingImage ? "Uploading Saree Photo..." :
-                 uploadingVideo ? "Uploading Looping Video..." : "Save Product"}
+                 uploadingVideo ? "Uploading Looping Video..." :
+                 isMediaSyncing ? "Worker Syncing Media..." : "Save Product"}
               </button>
             </div>
 

@@ -155,7 +155,7 @@ export default function CollectionsList({ initialCollections }: CollectionsListP
       <div className="ui-card p-6 space-y-4">
         <h3 className="font-display font-bold text-base text-[#4A154B] flex items-center gap-2">
           <FolderHeart size={16} />
-          Active Collections ({collections.length})
+          Active Collections ({Array.from(new Map(collections.map(c => [c.id, c])).values()).length})
         </h3>
 
         {collections.length === 0 ? (
@@ -166,13 +166,16 @@ export default function CollectionsList({ initialCollections }: CollectionsListP
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {collections.map((c) => (
-              <div 
+            {Array.from(new Map(collections.map(c => [c.id, c])).values()).map((c) => (
+              <a 
                 key={c.id} 
-                className="flex items-center justify-between p-4 rounded-xl border border-[#4A154B]/10 bg-white/60 hover:bg-white/80 hover:shadow-md transition-all duration-200"
+                href={`https://reshmipallu.com/collections/${c.handle}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between p-4 rounded-xl border border-[#4A154B]/10 bg-white/60 hover:bg-[#4A154B]/5 hover:shadow-md transition-all duration-200 no-underline cursor-pointer group"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#4A154B]/5 border border-[#4A154B]/10 flex items-center justify-center text-[#4A154B]">
+                  <div className="w-10 h-10 rounded-lg bg-[#4A154B]/5 border border-[#4A154B]/10 flex items-center justify-center text-[#4A154B] group-hover:bg-[#4A154B]/10 transition-colors">
                     <ShoppingBag size={18} />
                   </div>
                   <div>
@@ -185,12 +188,13 @@ export default function CollectionsList({ initialCollections }: CollectionsListP
                   </div>
                 </div>
 
-                <div className="text-right">
+                <div className="text-right flex items-center gap-2">
                   <span className="bg-[#E6F0EA] text-[#137333] border border-[#E6F0EA] rounded-full px-2.5 py-1 text-[10px] font-bold">
                     {c.productsCount} Sarees
                   </span>
+                  <span className="text-[10px] text-[#4A154B]/50 font-bold group-hover:translate-x-0.5 transition-transform">→</span>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         )}

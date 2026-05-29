@@ -27,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Inventory Grid", href: "/products", icon: ShoppingBag },
   { label: "Add Saree", href: "/products/add", icon: PlusCircle },
   { label: "Bulk Upload", href: "/bulk-upload", icon: UploadCloud },
+  { label: "Discounts", href: "/discounts", icon: Sparkles },
   { label: "Collections", href: "/collections", icon: FolderHeart },
   { label: "Customer Orders", href: "/orders", icon: Package },
   { label: "Operations Guide", href: "/manual", icon: BookOpen },
