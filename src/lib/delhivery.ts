@@ -153,10 +153,28 @@ export async function bookShipmentWithDelhivery(
 
     // Retrieve waybill from response
     const pkg = response?.packages?.[0] || response?.rm_packages?.[0];
-    const hasErrors = response?.errors && response.errors.length > 0;
 
-    if (hasErrors || !pkg?.waybill) {
-      const errMsg = response?.errors?.join(", ") || "Failed to generate waybill from Delhivery.";
+    // Build a human-readable error from whatever Delhivery returns
+    if (!pkg?.waybill || pkg?.status === "Fail") {
+      const apiErrors: string[] = [];
+
+      // Top-level errors array
+      if (response?.errors?.length) apiErrors.push(response.errors.join(", "));
+
+      // Per-package remarks (e.g. ER0005 suspicious consignee)
+      if (pkg?.remarks?.length) {
+        const errCode = pkg.err_code ? `[${pkg.err_code}] ` : "";
+        apiErrors.push(`${errCode}${pkg.remarks.join("; ")}`);
+      }
+
+      // Top-level remark
+      if (response?.rmk && !apiErrors.length) apiErrors.push(response.rmk);
+
+      const errMsg = apiErrors.length
+        ? apiErrors.join(" | ")
+        : "Failed to generate waybill from Delhivery.";
+
+      console.error("[Delhivery] Booking rejected:", errMsg, "\nFull response:", JSON.stringify(response));
       throw new Error(errMsg);
     }
 
