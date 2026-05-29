@@ -89,6 +89,7 @@ export default function AddProductPage() {
   const [region, setRegion] = useState("");
   const [blouseIncluded, setBlouseIncluded] = useState(true);
   const [blouseLength, setBlouseLength] = useState("0.8 meters");
+  const [sareeLength, setSareeLength] = useState("6.0");
   const [washCare, setWashCare] = useState("");
   const [foundersExclusive, setFoundersExclusive] = useState(false);
   const [privateNotes, setPrivateNotes] = useState("");
@@ -394,6 +395,7 @@ export default function AddProductPage() {
           blouseIncluded,
           blouseLength: blouseIncluded ? blouseLength : "",
           washCare,
+          sareeLength: parseFloat(sareeLength || "6.0").toFixed(1) + " meters",
           shortVideo: video ? { id: video.id, url: video.url } : undefined,
           foundersExclusive
         },
@@ -722,6 +724,20 @@ export default function AddProductPage() {
                     onChange={(e) => setBlouseLength(e.target.value)} 
                     disabled={!blouseIncluded}
                     className={`glass-input ${!blouseIncluded ? "bg-[#1A1A1A]/5 text-[#1A1A1A]/40 cursor-not-allowed border-[#1A1A1A]/10 font-semibold" : ""}`} 
+                  />
+                </div>
+
+                {/* Saree Length */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70">Saree Length (meters) *</label>
+                  <input 
+                    type="number" 
+                    step="0.1" 
+                    min="0.1" 
+                    value={sareeLength} 
+                    onChange={(e) => setSareeLength(e.target.value)} 
+                    required 
+                    className="glass-input font-semibold" 
                   />
                 </div>
 

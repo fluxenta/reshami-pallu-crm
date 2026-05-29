@@ -21,10 +21,19 @@ interface Coupon {
   discountPercent: number;
   minPurchase: number;
   isActive: boolean;
+  campaignType?: "standard" | "dead_stock";
+  deadStockAgeMonths?: number;
   updatedAt: string;
 }
 
-const emptyForm = { code: "", discountPercent: 10, minPurchase: 0, isActive: true };
+const emptyForm = { 
+  code: "", 
+  discountPercent: 10, 
+  minPurchase: 0, 
+  isActive: true,
+  campaignType: "standard",
+  deadStockAgeMonths: 1
+};
 
 export default function DiscountsPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -68,6 +77,8 @@ export default function DiscountsPage() {
           discountPercent: form.discountPercent,
           minPurchase: form.minPurchase,
           isActive: form.isActive,
+          campaignType: form.campaignType,
+          deadStockAgeMonths: form.deadStockAgeMonths,
         }),
       });
       const data = await res.json();
@@ -205,6 +216,34 @@ export default function DiscountsPage() {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#4A154B]/70">Campaign Type</label>
+                <select
+                  value={form.campaignType}
+                  onChange={(e) => setForm(f => ({ ...f, campaignType: e.target.value as "standard" | "dead_stock" }))}
+                  className={inputCls}
+                >
+                  <option value="standard">Standard (Storewide)</option>
+                  <option value="dead_stock">Dead Stock Campaign (Select old sarees only)</option>
+                </select>
+              </div>
+
+              {form.campaignType === "dead_stock" && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#4A154B]/70">Dead Stock Age Threshold (Months)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className={inputCls}
+                    value={form.deadStockAgeMonths}
+                    onChange={(e) => setForm(f => ({ ...f, deadStockAgeMonths: Math.max(1, Number(e.target.value)) }))}
+                    required
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between pt-1">
               <label className="flex items-center gap-3 cursor-pointer select-none">
                 <button
@@ -281,6 +320,13 @@ export default function DiscountsPage() {
                               : "bg-[#1A1A1A]/8 text-[#1A1A1A]/50"
                           }`}>
                             {coupon.isActive ? "Active" : "Inactive"}
+                          </span>
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            coupon.campaignType === "dead_stock"
+                              ? "bg-red-50 text-red-700 border border-red-100"
+                              : "bg-blue-50 text-blue-700 border border-blue-100"
+                          }`}>
+                            {coupon.campaignType === "dead_stock" ? `Dead Stock (${coupon.deadStockAgeMonths}m)` : "Storewide"}
                           </span>
                         </div>
                         <p className="text-xs text-[#1A1A1A]/50 mt-1">

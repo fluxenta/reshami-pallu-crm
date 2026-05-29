@@ -61,6 +61,8 @@ export async function POST(req: NextRequest) {
       discountPercent: Number(discountPercent),
       minPurchase: Number(minPurchase || 0),
       isActive: isActive !== undefined ? Boolean(isActive) : true,
+      campaignType: body.campaignType || "standard",
+      deadStockAgeMonths: body.deadStockAgeMonths !== undefined ? Number(body.deadStockAgeMonths) : 1,
       updatedAt: new Date().toISOString(),
     };
 

@@ -29,6 +29,15 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
   const [loadingTracking, setLoadingTracking] = useState(false);
   const [trackingError, setTrackingError] = useState<string | null>(null);
 
+  // Customer profile state
+  const [customerProfile, setCustomerProfile] = useState<any>(null);
+  const [loadingCustomer, setLoadingCustomer] = useState(false);
+
+  // Delhivery fulfillment state
+  const [fulfilling, setFulfilling] = useState(false);
+  const [fulfillmentError, setFulfillmentError] = useState<string | null>(null);
+  const [manualWeight, setManualWeight] = useState("0.5");
+
   // Parse Razorpay IDs from Shopify Order Note
   const noteText = order.note || "";
   const orderIdMatch = noteText.match(/Order ID:\s*([^\s,]+)/i);
@@ -67,9 +76,66 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
     }
   };
 
+  const handleFulfillOrder = async () => {
+    if (!order.shippingAddress) {
+      setFulfillmentError("Cannot fulfill: No shipping address provided.");
+      return;
+    }
+    setFulfilling(true);
+    setFulfillmentError(null);
+    try {
+      const res = await fetch("/api/orders/fulfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          orderName: order.name,
+          customerName: `${order.shippingAddress.firstName} ${order.shippingAddress.lastName || ""}`.trim(),
+          phone: order.shippingAddress.phone || order.customer?.phone || "",
+          address1: order.shippingAddress.address1,
+          address2: order.shippingAddress.address2 || "",
+          city: order.shippingAddress.city,
+          province: order.shippingAddress.province,
+          zip: order.shippingAddress.zip,
+          weight: manualWeight,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFulfillmentError(data.error || "Failed to fulfill order.");
+      } else {
+        alert(data.message || "Order successfully booked and marked as fulfilled!");
+        window.location.reload();
+      }
+    } catch {
+      setFulfillmentError("Network error. Could not book shipment.");
+    } finally {
+      setFulfilling(false);
+    }
+  };
+
   useEffect(() => {
     fetchTrackingData();
   }, [awb]);
+
+  useEffect(() => {
+    if (order.customer?.id) {
+      (async () => {
+        setLoadingCustomer(true);
+        try {
+          const res = await fetch(`/api/orders/customer?id=${encodeURIComponent(order.customer.id)}`);
+          if (res.ok) {
+            const data = await res.json();
+            setCustomerProfile(data.customer);
+          }
+        } catch (err) {
+          console.error("Failed to load customer profile:", err);
+        } finally {
+          setLoadingCustomer(false);
+        }
+      })();
+    }
+  }, [order.customer?.id]);
 
   // Compute item margins and overall metrics
   let totalOrderCost = 0;
@@ -152,12 +218,12 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
           {/* Customer Profile & Shipping */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Customer info */}
-            <div className="ui-card p-4 bg-white">
+            <div className="ui-card p-4 bg-white space-y-3">
               <h3 className="text-xs font-bold uppercase text-[#4A154B] border-b border-[#4A154B]/5 pb-2 flex items-center gap-1.5">
                 <User size={14} />
                 Customer Profile
               </h3>
-              <div className="mt-3 space-y-2 text-xs">
+              <div className="space-y-2 text-xs">
                 <p className="font-semibold text-sm">
                   {order.customer?.firstName} {order.customer?.lastName || "Customer"}
                 </p>
@@ -172,6 +238,36 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                   </p>
                 )}
               </div>
+
+              {loadingCustomer && (
+                <div className="text-[10px] text-[#1A1A1A]/40 animate-pulse">Loading Shopify profile data...</div>
+              )}
+
+              {customerProfile && (
+                <div className="pt-2 border-t border-[#4A154B]/5 space-y-2 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-[#1A1A1A]/50">Total Orders:</span>
+                    <span className="font-bold text-[#4A154B]">{customerProfile.numberOfOrders}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#1A1A1A]/50">Total Spent:</span>
+                    <span className="font-bold text-[#4A154B]">₹{parseFloat(customerProfile.amountSpent?.amount || "0").toLocaleString("en-IN")}</span>
+                  </div>
+
+                  {customerProfile.addresses && customerProfile.addresses.length > 0 && (
+                    <div className="pt-1.5">
+                      <span className="text-[#1A1A1A]/50 block mb-1">Saved Addresses in Shopify:</span>
+                      <div className="max-h-20 overflow-y-auto space-y-1 bg-[#FAF8F5] p-1.5 rounded border border-[#4A154B]/5 text-[10px] text-[#1A1A1A]/70">
+                        {customerProfile.addresses.map((addr: any, idx: number) => (
+                          <div key={idx} className="pb-1 border-b border-[#1A1A1A]/5 last:border-b-0 last:pb-0">
+                            {addr.address1}, {addr.city} - {addr.zip}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Delivery address */}
@@ -259,14 +355,14 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
           </div>
 
           {/* Logistics & Tracking (Delhivery) */}
-          {awb && (
-            <div className="ui-card p-5 bg-white">
-              <div className="flex items-center justify-between border-b border-[#4A154B]/5 pb-2.5 mb-4">
-                <h3 className="text-xs font-bold uppercase text-[#4A154B] flex items-center gap-1.5">
-                  <Truck size={14} className="text-[#D4AF37]" />
-                  Logistics Tracking (Delhivery)
-                </h3>
-                
+          <div className="ui-card p-5 bg-white">
+            <div className="flex items-center justify-between border-b border-[#4A154B]/5 pb-2.5 mb-4">
+              <h3 className="text-xs font-bold uppercase text-[#4A154B] flex items-center gap-1.5">
+                <Truck size={14} className="text-[#D4AF37]" />
+                Logistics Tracking (Delhivery)
+              </h3>
+              
+              {awb && (
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-xs font-bold text-[#4A154B] bg-[#4A154B]/5 px-2 py-0.5 rounded">
                     AWB: {awb}
@@ -280,10 +376,12 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                     <RefreshCw size={14} className={loadingTracking ? "animate-spin" : ""} />
                   </button>
                 </div>
-              </div>
+              )}
+            </div>
 
-              {/* Status Display */}
-              {loadingTracking ? (
+            {awb ? (
+              /* Status Display */
+              loadingTracking ? (
                 <div className="text-xs text-[#1A1A1A]/60 flex items-center gap-2 py-4 justify-center">
                   <RefreshCw size={14} className="animate-spin text-[#4A154B]" />
                   Fetching live courier timeline...
@@ -328,9 +426,48 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                 <div className="text-xs text-[#1A1A1A]/55 text-center py-4 bg-[#FAF8F5] rounded-xl border border-dashed border-[#1A1A1A]/10">
                   Awaiting courier manifestation.
                 </div>
-              )}
-            </div>
-          )}
+              )
+            ) : (
+              /* Fulfillment Fulfill actions */
+              <div className="space-y-4 text-xs">
+                <p className="text-[#1A1A1A]/60">
+                  This order has not been fulfilled yet. Manifest shipment directly with Delhivery and push fulfillment status to Shopify.
+                </p>
+
+                <div className="flex flex-col gap-1.5 p-3.5 bg-[#FAF8F5] rounded-xl border border-[#4A154B]/5">
+                  <label className="text-[10px] uppercase font-bold text-[#4A154B] tracking-wider">
+                    Package Weight (kg)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={manualWeight}
+                      onChange={(e) => setManualWeight(e.target.value)}
+                      className="w-24 h-9 rounded-lg border border-[#4A154B]/10 px-2.5 bg-white text-xs outline-none focus:border-[#4A154B]"
+                    />
+                    <span className="text-xs text-[#1A1A1A]/50">kg (e.g. 0.5 for light boxes, 1.2 for bridal sarees)</span>
+                  </div>
+                </div>
+
+                {fulfillmentError && (
+                  <div className="p-3 bg-red-50 text-red-700 rounded-xl border border-red-200">
+                    {fulfillmentError}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={fulfilling || !order.shippingAddress}
+                  onClick={handleFulfillOrder}
+                  className="w-full inline-flex items-center justify-center gap-2 bg-[#4A154B] hover:bg-[#4A154B]/90 text-white font-bold py-3 px-4 rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer text-xs uppercase tracking-wider"
+                >
+                  <Truck size={14} />
+                  {fulfilling ? "Manifesting with Delhivery..." : "Fulfill & Manifest with Delhivery"}
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Secure Payment details (Razorpay) */}
           <div className="ui-card p-4 bg-white">

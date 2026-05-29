@@ -13,7 +13,11 @@ import {
   LogOut,
   X,
   BookOpen,
-  Package
+  Package,
+  ScrollText,
+  UserRound,
+  ShieldCheck,
+  Palette
 } from "lucide-react";
 
 interface NavItem {
@@ -30,6 +34,10 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Discounts", href: "/discounts", icon: Sparkles },
   { label: "Collections", href: "/collections", icon: FolderHeart },
   { label: "Customer Orders", href: "/orders", icon: Package },
+  { label: "Founder's Story", href: "/founder-story", icon: UserRound },
+  { label: "Financials", href: "/financials", icon: ScrollText },
+  { label: "Shopify Policies", href: "/policies", icon: ShieldCheck },
+  { label: "Store Customizer", href: "/customizer", icon: Palette },
   { label: "Operations Guide", href: "/manual", icon: BookOpen },
 ];
 

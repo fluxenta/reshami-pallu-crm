@@ -22,6 +22,7 @@ export default async function DashboardPage() {
   let totalRetailValue = 0;
   let totalCostValue = 0;
   let lowStockProducts: any[] = [];
+  let deadStockProducts: any[] = [];
   
   try {
     // 1. Fetch products from Shopify
@@ -31,6 +32,9 @@ export default async function DashboardPage() {
     // 2. Fetch corresponding metadata from Redis
     const skus = products.map(p => p.sku).filter(Boolean);
     const metaMap = await sareeDb.mget(skus);
+
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
     // 3. Compute stats
     products.forEach(p => {
@@ -48,6 +52,16 @@ export default async function DashboardPage() {
       if (stock < 3) {
         lowStockProducts.push({
           ...p,
+          costPrice: meta?.costPrice || 0,
+          margin: meta?.margin || 0
+        });
+      }
+
+      const createdAtDate = p.createdAt ? new Date(p.createdAt) : null;
+      if (createdAtDate && createdAtDate < oneMonthAgo && stock > 0) {
+        deadStockProducts.push({
+          ...p,
+          ageInDays: Math.floor((Date.now() - createdAtDate.getTime()) / (1000 * 60 * 60 * 24)),
           costPrice: meta?.costPrice || 0,
           margin: meta?.margin || 0
         });
@@ -273,6 +287,74 @@ export default async function DashboardPage() {
               </div>
             </div>
 
+          </div>
+
+          {/* Dead Stock Section */}
+          <div className="ui-card p-6 space-y-4">
+            <div className="flex justify-between items-center">
+              <h4 className="font-display font-bold text-base text-red-700 flex items-center gap-2">
+                <AlertTriangle size={16} className="text-red-600 animate-pulse" />
+                Dead Stock Inventory (Held &gt; 1 Month)
+              </h4>
+              <span className="text-xs bg-red-50 text-red-700 border border-red-100 rounded-full px-2.5 py-0.5 font-bold">
+                {deadStockProducts.length} Items Identified
+              </span>
+            </div>
+
+            {deadStockProducts.length === 0 ? (
+              <div className="h-32 rounded-xl border border-dashed border-[#4A154B]/10 flex items-center justify-center bg-[#FAF8F5]/30">
+                <p className="text-xs text-[#1A1A1A]/40 font-medium">
+                  ✨ Brilliant! No sarees in inventory have been held for more than 1 month.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#4A154B]/10 text-[10px] uppercase tracking-wider text-[#1A1A1A]/50 font-bold">
+                      <th className="pb-3">Saree Title</th>
+                      <th className="pb-3">SKU</th>
+                      <th className="pb-3 text-center">Age (Days)</th>
+                      <th className="pb-3 text-center">Stock Level</th>
+                      <th className="pb-3 text-right">Retail Value</th>
+                      <th className="pb-3 text-right">Cost Price</th>
+                      <th className="pb-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#4A154B]/5 text-xs text-[#1A1A1A]/80">
+                    {deadStockProducts.map((p) => (
+                      <tr key={p.id} className="hover:bg-red-50/30 transition-colors duration-200">
+                        <td className="py-3 font-semibold text-[#4A154B] max-w-[250px] truncate">
+                          {p.title}
+                        </td>
+                        <td className="py-3 font-mono text-[11px] text-[#1A1A1A]/60">
+                          {p.sku}
+                        </td>
+                        <td className="py-3 text-center font-bold text-red-600">
+                          {p.ageInDays} days
+                        </td>
+                        <td className="py-3 text-center">
+                          <span className="bg-[#4A154B]/5 text-[#4A154B] px-2 py-0.5 rounded font-medium">
+                            {p.stock} units
+                          </span>
+                        </td>
+                        <td className="py-3 text-right font-medium">
+                          ₹{(p.price || 0).toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-3 text-right text-[#1A1A1A]/60">
+                          ₹{(p.costPrice || 0).toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-3 text-right">
+                          <Link href="/discounts" className="no-underline text-xs bg-red-50 text-red-700 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded font-semibold transition-colors duration-200 inline-block">
+                            Run Campaign
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
         </main>

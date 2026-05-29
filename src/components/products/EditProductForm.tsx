@@ -90,6 +90,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
   const [region, setRegion] = useState(initialProduct.metafields.region || "Banaras");
   const [blouseIncluded, setBlouseIncluded] = useState(initialProduct.metafields.blouseIncluded ?? true);
   const [blouseLength, setBlouseLength] = useState(initialProduct.metafields.blouseLength || "0.8 meters");
+  const [sareeLength, setSareeLength] = useState(parseFloat(initialProduct.metafields.sareeLength || "6.0").toFixed(1));
   const [washCare, setWashCare] = useState(initialProduct.metafields.washCare || "Dry Clean Only");
   const [foundersExclusive, setFoundersExclusive] = useState(initialProduct.metafields.foundersExclusive ?? false);
   const [privateNotes, setPrivateNotes] = useState(initialProduct.privateNotes || "");
@@ -346,6 +347,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
           blouseIncluded,
           blouseLength: blouseIncluded ? blouseLength : "",
           washCare,
+          sareeLength: parseFloat(sareeLength || "6.0").toFixed(1) + " meters",
           shortVideo: video ? { id: video.id, url: video.url } : undefined,
           foundersExclusive
         },
@@ -669,6 +671,20 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
               onChange={(e) => setBlouseLength(e.target.value)} 
               disabled={!blouseIncluded}
               className={`glass-input ${!blouseIncluded ? "bg-[#1A1A1A]/5 text-[#1A1A1A]/40 cursor-not-allowed border-[#1A1A1A]/10 font-semibold" : ""}`} 
+            />
+          </div>
+
+          {/* Saree Length */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold uppercase text-[#1A1A1A]/70">Saree Length (meters) *</label>
+            <input 
+              type="number" 
+              step="0.1" 
+              min="0.1" 
+              value={sareeLength} 
+              onChange={(e) => setSareeLength(e.target.value)} 
+              required 
+              className="glass-input font-semibold" 
             />
           </div>
 

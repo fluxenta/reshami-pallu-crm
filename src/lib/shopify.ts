@@ -112,6 +112,7 @@ export interface SareeProduct {
   imageUrl?: string;
   images?: Array<{ id: string; url: string }>;
   sku: string;
+  createdAt?: string;
   price: number;
   compareAtPrice?: number | null;
   stock: number;
@@ -126,6 +127,7 @@ export interface SareeProduct {
     blouseIncluded?: boolean;
     blouseLength?: string;
     washCare?: string;
+    sareeLength?: string;
     shortVideo?: {
       id: string;
       url: string;
@@ -141,6 +143,7 @@ const PRODUCT_FRAGMENT = `
   fragment ProductDetails on Product {
     id
     title
+    createdAt
     descriptionHtml
     handle
     status
@@ -195,6 +198,7 @@ const PRODUCT_FRAGMENT = `
     blouseLength: metafield(namespace: "saree", key: "blouse_length") { value }
     washCareV2: metafield(namespace: "saree", key: "wash_care_v2") { value }
     washCareLegacy: metafield(namespace: "saree", key: "wash_care") { value }
+    sareeLength: metafield(namespace: "saree", key: "saree_length") { value }
     shortVideo: metafield(namespace: "saree", key: "short_video") {
       value
       reference {
@@ -250,6 +254,7 @@ function mapShopifyProduct(node: any): SareeProduct {
     stock: availableQty,
     locationId: invLevelEdge?.location?.id,
     inventoryItemId: variantEdge?.inventoryItem?.id,
+    createdAt: node.createdAt,
     metafields: {
       fabric: node.fabric?.value,
       weave: node.weave?.value,
@@ -259,6 +264,7 @@ function mapShopifyProduct(node: any): SareeProduct {
       blouseIncluded: node.blouseIncluded?.value === 'true',
       blouseLength: node.blouseLength?.value,
       washCare: node.washCareV2?.value || node.washCareLegacy?.value,
+      sareeLength: node.sareeLength?.value,
       shortVideo: shortVideoData,
       foundersExclusive: node.foundersExclusive?.value === 'true',
     }
@@ -346,6 +352,7 @@ export const shopifySaree = {
       { namespace: "saree", key: "blouse_included", value: saree.metafields.blouseIncluded ? 'true' : 'false', type: "single_line_text_field" },
       { namespace: "saree", key: "blouse_length", value: saree.metafields.blouseLength || '', type: "single_line_text_field" },
       { namespace: "saree", key: "wash_care_v2", value: saree.metafields.washCare || '', type: "multi_line_text_field" },
+      { namespace: "saree", key: "saree_length", value: saree.metafields.sareeLength || '6.0', type: "single_line_text_field" },
       { namespace: "saree", key: "founders_exclusive", value: saree.metafields.foundersExclusive ? 'true' : 'false', type: "single_line_text_field" },
     ].filter(m => m.value !== '');
 
@@ -436,6 +443,7 @@ export const shopifySaree = {
               id: defaultVariantId,
               price: saree.price.toString(),
               compareAtPrice: saree.compareAtPrice ? saree.compareAtPrice.toString() : null,
+              inventoryPolicy: "DENY",
               inventoryItem: {
                 sku: saree.sku,
                 tracked: true
@@ -604,6 +612,7 @@ export const shopifySaree = {
       if (m.blouseIncluded !== undefined) metafields.push({ namespace: "saree", key: "blouse_included", value: m.blouseIncluded ? 'true' : 'false', type: "single_line_text_field" });
       if (m.blouseLength !== undefined) metafields.push({ namespace: "saree", key: "blouse_length", value: m.blouseLength, type: "single_line_text_field" });
       if (m.washCare !== undefined) metafields.push({ namespace: "saree", key: "wash_care_v2", value: m.washCare, type: "multi_line_text_field" });
+      if (m.sareeLength !== undefined) metafields.push({ namespace: "saree", key: "saree_length", value: m.sareeLength || '6.0', type: "single_line_text_field" });
       if (m.foundersExclusive !== undefined) metafields.push({ namespace: "saree", key: "founders_exclusive", value: m.foundersExclusive ? 'true' : 'false', type: "single_line_text_field" });
       
       if (m.shortVideo?.id) {
@@ -807,7 +816,7 @@ export const shopifySaree = {
       }
     `;
 
-    const variantInput: any = { id: variantId };
+    const variantInput: any = { id: variantId, inventoryPolicy: "DENY" };
     if (price !== undefined) variantInput.price = price.toString();
     if (compareAtPrice !== undefined) variantInput.compareAtPrice = compareAtPrice ? compareAtPrice.toString() : null;
     if (sku !== undefined) {
@@ -1074,6 +1083,7 @@ export const shopifyOrder = {
               displayFinancialStatus
               displayFulfillmentStatus
               customer {
+                id
                 firstName
                 lastName
                 phone
@@ -1124,6 +1134,208 @@ export const shopifyOrder = {
     } catch (err) {
       console.error("Failed to fetch Shopify orders:", err);
       return [];
+    }
+  },
+
+  async fulfillOrder(orderId: string, trackingNumber: string, trackingCarrier: string): Promise<boolean> {
+    // 1. Get the fulfillment order ID for this order
+    const foQuery = `
+      query getFulfillmentOrder($id: ID!) {
+        order(id: $id) {
+          fulfillmentOrders(first: 5) {
+            edges {
+              node {
+                id
+                status
+                supportedActions
+                lineItems(first: 100) {
+                  edges {
+                    node {
+                      id
+                      quantity
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const foData = await shopifyAdminFetch<{ order: { fulfillmentOrders: { edges: Array<{ node: any }> } } }>({
+      query: foQuery,
+      variables: { id: orderId }
+    });
+
+    const activeFulfillmentOrder = foData.order?.fulfillmentOrders?.edges?.find(
+      e => e.node.status === "OPEN" || e.node.status === "IN_PROGRESS"
+    )?.node;
+
+    if (!activeFulfillmentOrder) {
+      console.warn("No open fulfillment orders found for this order. It might already be fulfilled.");
+      return false;
+    }
+
+    // 2. Fulfill the order
+    const fulfillmentMutation = `
+      mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
+        fulfillmentCreateV2(fulfillment: $fulfillment) {
+          fulfillment {
+            id
+            status
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const lineItems = activeFulfillmentOrder.lineItems.edges.map((e: any) => ({
+      id: e.node.id,
+      quantity: e.node.quantity
+    }));
+
+    const variables = {
+      fulfillment: {
+        lineItemsByFulfillmentOrder: [
+          {
+            fulfillmentOrderId: activeFulfillmentOrder.id,
+            fulfillmentOrderLineItems: lineItems
+          }
+        ],
+        trackingInfo: {
+          number: trackingNumber,
+          company: trackingCarrier,
+          url: `https://track.delhivery.com/share/activity?awb=${trackingNumber}`
+        }
+      }
+    };
+
+    const res = await shopifyAdminFetch<{
+      fulfillmentCreateV2: {
+        fulfillment: any;
+        userErrors: Array<{ message: string }>;
+      }
+    }>({
+      query: fulfillmentMutation,
+      variables
+    });
+
+    if (res.fulfillmentCreateV2?.userErrors?.length) {
+      throw new Error(`Shopify fulfillment failed: ${res.fulfillmentCreateV2.userErrors[0].message}`);
+    }
+
+    // 3. Save the AWB in Order tags/custom attributes so the storefront can easily display it too
+    const updateOrderMutation = `
+      mutation updateOrderTags($id: ID!, $input: OrderInput!) {
+        orderUpdate(input: $input) {
+          order {
+            id
+            tags
+          }
+          userErrors {
+            message
+          }
+        }
+      }
+    `;
+
+    // Retrieve current tags
+    const currentTagsQuery = `
+      query getOrderTags($id: ID!) {
+        order(id: $id) {
+          tags
+          customAttributes {
+            key
+            value
+          }
+        }
+      }
+    `;
+    const tagRes = await shopifyAdminFetch<{ order: { tags: string[], customAttributes: Array<{ key: string, value: string }> } }>({
+      query: currentTagsQuery,
+      variables: { id: orderId }
+    });
+
+    const tags = [...(tagRes.order?.tags || [])];
+    if (!tags.includes("Delhivery")) tags.push("Delhivery");
+    if (!tags.includes(`AWB-${trackingNumber}`)) tags.push(`AWB-${trackingNumber}`);
+
+    const newAttributes = [...(tagRes.order?.customAttributes || [])];
+    if (!newAttributes.some(attr => attr.key.toLowerCase() === "awb")) {
+      newAttributes.push({ key: "awb", value: trackingNumber });
+    }
+
+    // Prepare note with AWB information
+    let existingNote = tagRes.order?.customAttributes?.find(attr => attr.key.toLowerCase() === "note")?.value || "";
+    let newNote = `AWB: ${trackingNumber}\n${existingNote}`;
+
+    await shopifyAdminFetch({
+      query: updateOrderMutation,
+      variables: {
+        id: orderId,
+        input: {
+          id: orderId,
+          tags,
+          customAttributes: newAttributes,
+          note: newNote
+        }
+      }
+    });
+
+    return true;
+  }
+};
+
+export const shopifyCustomer = {
+  async get(id: string): Promise<any> {
+    const query = `
+      query getCustomerDetails($id: ID!) {
+        customer(id: $id) {
+          id
+          firstName
+          lastName
+          phone
+          email
+          numberOfOrders
+          amountSpent {
+            amount
+            currencyCode
+          }
+          defaultAddress {
+            address1
+            address2
+            city
+            province
+            zip
+            country
+            phone
+          }
+          addresses {
+            address1
+            address2
+            city
+            province
+            zip
+            country
+            phone
+          }
+        }
+      }
+    `;
+
+    try {
+      const res = await shopifyAdminFetch<{ customer: any }>({
+        query,
+        variables: { id }
+      });
+      return res.customer;
+    } catch (err) {
+      console.error("Failed to fetch customer details in CRM:", err);
+      return null;
     }
   }
 };

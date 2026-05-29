@@ -70,3 +70,107 @@ export async function getTrackingByAwb(awbCode: string): Promise<NormalizedTrack
     return null;
   }
 }
+
+export interface BookShipmentInput {
+  orderId: string;
+  customerName: string;
+  address: {
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    pincode: string;
+    mobile: string;
+  };
+  weightKg?: number;
+  packageDesc?: string;
+}
+
+export interface BookingResult {
+  success: boolean;
+  awb?: string;
+  status?: string;
+  error?: string;
+}
+
+export async function bookShipmentWithDelhivery(
+  input: BookShipmentInput
+): Promise<BookingResult> {
+  const token = process.env.DELHIVERY_API_TOKEN || "";
+  const pickupLocation = process.env.DELHIVERY_PICKUP_LOCATION || "RESHMI PALLU";
+  if (!token) {
+    return { success: false, error: "Delhivery API Token is not configured." };
+  }
+
+  const { orderId, customerName, address, weightKg = 0.5, packageDesc } = input;
+
+  try {
+    const shipmentData = {
+      shipments: [
+        {
+          name: customerName,
+          add: `${address.line1}${address.line2 ? `, ${address.line2}` : ""}`,
+          pin: address.pincode,
+          city: address.city,
+          state: address.state,
+          country: "India",
+          phone: address.mobile,
+          order: orderId,
+          payment_mode: "Pre-paid",
+          package_desc: packageDesc || "Premium Indian Saree & Ethnic Wear",
+          package_type: "box",
+          weight: weightKg,
+          cod_amount: 0,
+        },
+      ],
+      pickup_location: {
+        name: pickupLocation,
+      },
+    };
+
+    const baseUrl = getBaseUrl();
+    const params = new URLSearchParams();
+    params.set("format", "json");
+    params.set("data", JSON.stringify(shipmentData));
+
+    const res = await fetch(`${baseUrl}/api/cmu/create.json`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Token ${token}`,
+      },
+      body: params.toString(),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error(`Delhivery API returned status ${res.status}`);
+    }
+
+    const response = await res.json() as any;
+
+    // Retrieve waybill from response
+    const pkg = response?.packages?.[0] || response?.rm_packages?.[0];
+    const hasErrors = response?.errors && response.errors.length > 0;
+
+    if (hasErrors || !pkg?.waybill) {
+      const errMsg = response?.errors?.join(", ") || "Failed to generate waybill from Delhivery.";
+      throw new Error(errMsg);
+    }
+
+    return {
+      success: true,
+      awb: pkg.waybill,
+      status: pkg.status || "Manifested",
+    };
+  } catch (err: any) {
+    console.error("Delhivery shipment booking failed:", err);
+    return {
+      success: false,
+      error: err.message || "Shipment booking failed.",
+    };
+  }
+}
+
