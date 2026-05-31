@@ -223,69 +223,148 @@ export default function CollectionsList({ initialCollections }: CollectionsListP
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {Array.from(new Map(collections.map(c => [c.id, c])).values()).map((c) => {
-              const tagRule = c.rules?.find(r => r.column === "TAG");
-              const collectionTag = tagRule?.condition || c.title; // fallback
-              const isProtected = c.title.toLowerCase() === "all sarees" || c.title.toLowerCase().includes("founder") || collectionTag.toLowerCase().includes("founder");
-              const isCurrentlyDisabled = disabledTags.some(t => t.toLowerCase() === collectionTag.toLowerCase());
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {Array.from(new Map(collections.map(c => [c.id, c])).values())
+                .filter(c => !c.title.includes("[Auto]"))
+                .map((c) => {
+                const tagRule = c.rules?.find(r => r.column === "TAG");
+                const collectionTag = tagRule?.condition || c.title; // fallback
+                const isProtected = c.title.toLowerCase() === "all sarees" || c.title.toLowerCase().includes("founder") || collectionTag.toLowerCase().includes("founder");
+                const isCurrentlyDisabled = disabledTags.some(t => t.toLowerCase() === collectionTag.toLowerCase());
 
-              return (
-                <div key={c.id} className="relative group">
-                  <a 
-                    href={`https://reshmipallu.com/collections/${c.handle}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`flex items-center justify-between p-4 rounded-xl border border-[#4A154B]/10 transition-all duration-200 no-underline cursor-pointer h-full ${isCurrentlyDisabled ? 'bg-gray-50 opacity-70' : 'bg-white/60 hover:bg-[#4A154B]/5 hover:shadow-md'}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg border flex items-center justify-center transition-colors ${isCurrentlyDisabled ? 'bg-gray-200 border-gray-300 text-gray-500' : 'bg-[#4A154B]/5 border-[#4A154B]/10 text-[#4A154B] group-hover:bg-[#4A154B]/10'}`}>
-                        <ShoppingBag size={18} />
+                return (
+                  <div key={c.id} className="relative group">
+                    <a 
+                      href={`https://reshmipallu.com/collections/${c.handle}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex items-center justify-between p-4 rounded-xl border border-[#4A154B]/10 transition-all duration-200 no-underline cursor-pointer h-full ${isCurrentlyDisabled ? 'bg-gray-50 opacity-70' : 'bg-white/60 hover:bg-[#4A154B]/5 hover:shadow-md'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg border flex items-center justify-center transition-colors ${isCurrentlyDisabled ? 'bg-gray-200 border-gray-300 text-gray-500' : 'bg-[#4A154B]/5 border-[#4A154B]/10 text-[#4A154B] group-hover:bg-[#4A154B]/10'}`}>
+                          <ShoppingBag size={18} />
+                        </div>
+                        <div>
+                          <span className={`font-semibold text-sm block leading-tight ${isCurrentlyDisabled ? 'text-gray-600' : 'text-[#4A154B]'}`}>
+                            {c.title}
+                          </span>
+                          <span className="text-[10px] text-[#1A1A1A]/50 font-mono mt-1 block">
+                            slug: {c.handle}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <span className={`font-semibold text-sm block leading-tight ${isCurrentlyDisabled ? 'text-gray-600' : 'text-[#4A154B]'}`}>
-                          {c.title}
-                        </span>
-                        <span className="text-[10px] text-[#1A1A1A]/50 font-mono mt-1 block">
-                          slug: {c.handle}
+
+                      <div className="text-right flex items-center gap-2">
+                        <span className={`border rounded-full px-2.5 py-1 text-[10px] font-bold ${isCurrentlyDisabled ? 'bg-gray-200 text-gray-600 border-gray-200' : 'bg-[#E6F0EA] text-[#137333] border-[#E6F0EA]'}`}>
+                          {c.productsCount} Sarees
                         </span>
                       </div>
-                    </div>
+                    </a>
 
-                    <div className="text-right flex items-center gap-2">
-                      <span className={`border rounded-full px-2.5 py-1 text-[10px] font-bold ${isCurrentlyDisabled ? 'bg-gray-200 text-gray-600 border-gray-200' : 'bg-[#E6F0EA] text-[#137333] border-[#E6F0EA]'}`}>
-                        {c.productsCount} Sarees
-                      </span>
-                    </div>
-                  </a>
+                    {/* Actions overlay - only show on hover if not protected */}
+                    {!isProtected && (
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          type="button"
+                          disabled={loading}
+                          onClick={(e) => handleDisable(e, collectionTag, isCurrentlyDisabled)}
+                          className={`px-2 py-1 text-[10px] font-bold rounded-md cursor-pointer transition ${isCurrentlyDisabled ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}
+                          title={isCurrentlyDisabled ? "Enable in Nav" : "Disable in Nav"}
+                        >
+                          {isCurrentlyDisabled ? "Enable" : "Disable"}
+                        </button>
+                        <button 
+                          type="button"
+                          disabled={loading}
+                          onClick={(e) => handleDelete(e, c.id, collectionTag)}
+                          className="px-2 py-1 text-[10px] font-bold rounded-md bg-red-100 text-red-700 hover:bg-red-200 cursor-pointer transition"
+                          title="Delete Collection & Remove Tag"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
-                  {/* Actions overlay - only show on hover if not protected */}
-                  {!isProtected && (
-                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        type="button"
-                        disabled={loading}
-                        onClick={(e) => handleDisable(e, collectionTag, isCurrentlyDisabled)}
-                        className={`px-2 py-1 text-[10px] font-bold rounded-md cursor-pointer transition ${isCurrentlyDisabled ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}
-                        title={isCurrentlyDisabled ? "Enable in Nav" : "Disable in Nav"}
-                      >
-                        {isCurrentlyDisabled ? "Enable" : "Disable"}
-                      </button>
-                      <button 
-                        type="button"
-                        disabled={loading}
-                        onClick={(e) => handleDelete(e, c.id, collectionTag)}
-                        className="px-2 py-1 text-[10px] font-bold rounded-md bg-red-100 text-red-700 hover:bg-red-200 cursor-pointer transition"
-                        title="Delete Collection & Remove Tag"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
+            {/* Metafield Collections Section */}
+            {collections.some(c => c.title.includes("[Auto]")) && (
+              <div className="mt-8">
+                <h4 className="font-display font-bold text-sm text-[#4A154B] mb-4 flex items-center gap-2">
+                  <FolderHeart size={14} className="text-[#4A154B]/60" />
+                  Metafield Collections (Automated)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {Array.from(new Map(collections.map(c => [c.id, c])).values())
+                    .filter(c => c.title.includes("[Auto]"))
+                    .map((c) => {
+                    const tagRule = c.rules?.find(r => r.column === "TAG");
+                    const collectionTag = tagRule?.condition || c.title; // fallback
+                    const isProtected = c.title.toLowerCase() === "all sarees" || c.title.toLowerCase().includes("founder") || collectionTag.toLowerCase().includes("founder");
+                    const isCurrentlyDisabled = disabledTags.some(t => t.toLowerCase() === collectionTag.toLowerCase());
+
+                    return (
+                      <div key={c.id} className="relative group">
+                        <a 
+                          href={`https://reshmipallu.com/collections/${c.handle}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center justify-between p-4 rounded-xl border border-[#4A154B]/10 transition-all duration-200 no-underline cursor-pointer h-full ${isCurrentlyDisabled ? 'bg-gray-50 opacity-70' : 'bg-white/60 hover:bg-[#4A154B]/5 hover:shadow-md'}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg border flex items-center justify-center transition-colors ${isCurrentlyDisabled ? 'bg-gray-200 border-gray-300 text-gray-500' : 'bg-[#4A154B]/5 border-[#4A154B]/10 text-[#4A154B] group-hover:bg-[#4A154B]/10'}`}>
+                              <ShoppingBag size={18} />
+                            </div>
+                            <div>
+                              <span className={`font-semibold text-sm block leading-tight ${isCurrentlyDisabled ? 'text-gray-600' : 'text-[#4A154B]'}`}>
+                                {c.title}
+                              </span>
+                              <span className="text-[10px] text-[#1A1A1A]/50 font-mono mt-1 block">
+                                slug: {c.handle}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="text-right flex items-center gap-2">
+                            <span className={`border rounded-full px-2.5 py-1 text-[10px] font-bold ${isCurrentlyDisabled ? 'bg-gray-200 text-gray-600 border-gray-200' : 'bg-[#E6F0EA] text-[#137333] border-[#E6F0EA]'}`}>
+                              {c.productsCount} Sarees
+                            </span>
+                          </div>
+                        </a>
+
+                        {/* Actions overlay - only show on hover if not protected */}
+                        {!isProtected && (
+                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              type="button"
+                              disabled={loading}
+                              onClick={(e) => handleDisable(e, collectionTag, isCurrentlyDisabled)}
+                              className={`px-2 py-1 text-[10px] font-bold rounded-md cursor-pointer transition ${isCurrentlyDisabled ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}
+                              title={isCurrentlyDisabled ? "Enable in Nav" : "Disable in Nav"}
+                            >
+                              {isCurrentlyDisabled ? "Enable" : "Disable"}
+                            </button>
+                            <button 
+                              type="button"
+                              disabled={loading}
+                              onClick={(e) => handleDelete(e, c.id, collectionTag)}
+                              className="px-2 py-1 text-[10px] font-bold rounded-md bg-red-100 text-red-700 hover:bg-red-200 cursor-pointer transition"
+                              title="Delete Collection & Remove Tag"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

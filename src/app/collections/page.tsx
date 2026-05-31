@@ -9,7 +9,7 @@ export default async function CollectionsPage() {
   let collections: any[] = [];
 
   try {
-    collections = await shopifyCollection.list(50);
+    collections = await shopifyCollection.list(250);
   } catch (error) {
     console.error("Failed to fetch collections:", error);
   }

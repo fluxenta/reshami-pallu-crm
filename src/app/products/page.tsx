@@ -62,7 +62,10 @@ export default function ProductsPage() {
           };
         });
 
-        const filteredColls = mappedColls.filter((c: any) => c.title.trim().toLowerCase() !== "all sarees");
+        const filteredColls = mappedColls.filter((c: any) => 
+          c.title.trim().toLowerCase() !== "all sarees" && 
+          !c.title.includes("[Auto]")
+        );
 
         setCollections([{ title: "All Sarees", handle: "all-sarees" }, ...filteredColls]);
       } catch (e) {

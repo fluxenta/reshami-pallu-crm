@@ -1055,7 +1055,33 @@ export const shopifyCollection = {
         variables
       });
 
-      return res.collectionCreate.userErrors.length === 0;
+      if (res.collectionCreate.userErrors.length > 0) {
+        return false;
+      }
+
+      // Publish to Online Store / Headless channels so storefront API can see it
+      const collectionId = res.collectionCreate.collection.id;
+      try {
+        const pubQuery = `query { publications(first: 10) { edges { node { id } } } }`;
+        const pubRes = await shopifyAdminFetch<{ publications: { edges: Array<{ node: { id: string } }> } }>({ query: pubQuery });
+        
+        const publishMutation = `
+          mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
+            publishablePublish(id: $id, input: $input) {
+              userErrors { message }
+            }
+          }
+        `;
+        const inputs = pubRes.publications.edges.map(e => ({ publicationId: e.node.id }));
+        await shopifyAdminFetch({
+          query: publishMutation,
+          variables: { id: collectionId, input: inputs }
+        });
+      } catch (err) {
+        console.error(`Failed to publish collection ${title} to channels:`, err);
+      }
+
+      return true;
     } catch (err) {
       console.error(`Failed to create Smart Collection for tag ${tag}:`, err);
       return false;
