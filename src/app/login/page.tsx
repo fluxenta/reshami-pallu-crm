@@ -49,12 +49,12 @@ export default function LoginPage() {
           {/* Brand Emblem */}
           <img 
             src="/logo.jpg" 
-            alt="Reshami Pallu Logo" 
+            alt="Reshmi Pallu Logo" 
             className="w-16 h-16 rounded-full object-cover shadow-lg mb-4 border border-[#4A154B]/10" 
           />
           
           <h1 className="text-2xl sm:text-3xl font-display font-bold text-[#4A154B] leading-tight">
-            Reshami Pallu
+            Reshmi Pallu
           </h1>
           <p className="text-xs uppercase tracking-widest text-[#4A154B]/60 font-semibold mt-1" style={{ letterSpacing: "2px" }}>
             Admin Dashboard

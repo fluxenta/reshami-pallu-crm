@@ -92,12 +92,12 @@ export default function Sidebar() {
           <div className="flex items-center gap-3">
             <img 
               src="/logo.jpg" 
-              alt="Reshami Pallu" 
+              alt="Reshmi Pallu" 
               className="w-8 h-8 rounded-full object-cover border border-[#4A154B]/10 shadow-sm" 
             />
             <div>
               <span className="font-display font-bold text-[#4A154B] text-lg block leading-none">
-                Reshami Pallu
+                Reshmi Pallu
               </span>
               <span className="text-[9px] uppercase tracking-widest text-[#4A154B]/60 font-bold mt-1 block">
                 Admin Panel
