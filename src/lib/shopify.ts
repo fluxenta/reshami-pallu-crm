@@ -372,12 +372,8 @@ export const shopifySaree = {
       tags.push('Founders-Exclusive');
     }
 
-    // Prepare media array if shortVideo media ID is available
+    // Prepare media array for images only
     const media = [];
-    if (saree.metafields.shortVideo?.id && saree.metafields.shortVideo?.url) {
-      // For Shopify media creation, use the uploaded media URL as originalSource
-      media.push({ originalSource: saree.metafields.shortVideo.url, mediaContentType: "VIDEO" });
-    }
 
     if ((saree as any).images && Array.isArray((saree as any).images)) {
       for (const img of (saree as any).images) {

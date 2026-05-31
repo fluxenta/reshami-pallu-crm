@@ -84,7 +84,7 @@ export default function AddProductPage() {
   // Metafields
   const [fabric, setFabric] = useState("");
   const [weave, setWeave] = useState("");
-  const [colorFamily, setColorFamily] = useState("");
+  const [selectedColors, setSelectedColors] = useState<string[]>(["Red"]);
   const [occasion, setOccasion] = useState("");
   const [region, setRegion] = useState("");
   const [blouseIncluded, setBlouseIncluded] = useState(true);
@@ -107,10 +107,14 @@ export default function AddProductPage() {
   const [customWeave, setCustomWeave] = useState("");
   const [customOccasion, setCustomOccasion] = useState("");
   const [customColorFamily, setCustomColorFamily] = useState("");
+  const [showCustomColor, setShowCustomColor] = useState(false);
 
   // Dynamic selector options
   const regionOptions = Array.from(new Set(["Banaras", "Kanchipuram", "Chanderi", "Kalamkari", "Mysore", ...customRegions, "Other"])).filter(Boolean) as string[];
-  const colorFamilyOptions = Array.from(new Set(["Red", "Blue", "Green", "Gold", "Silver", "Pink", "White", "Black", "Maroon", "Purple", "Cream", "Orange", "Yellow", "Turquoise", ...customColorFamilies, "Other"])).filter(Boolean) as string[];
+  const colorFamilyOptions = Array.from(new Set([
+    "Red", "Blue", "Green", "Gold", "Silver", "Pink", "White", "Black", "Maroon", "Purple", "Cream", "Orange", "Yellow", "Turquoise", 
+    ...customColorFamilies
+  ])).filter(Boolean) as string[];
   const fabricOptions = Array.from(new Set(["Pure Katan Silk", "Pure Silk", "Chanderi Silk", "Georgette", "Organza", "Tissue Silk", "Cotton", ...customFabrics, "Other"])).filter(Boolean) as string[];
   const weaveOptions = Array.from(new Set(["Kadhua", "Jamdani", "Ikat", "Meenakari", "Fekwa", ...customWeaves, "Other"])).filter(Boolean) as string[];
   const occasionOptions = Array.from(new Set(["Bridal", "Festive", "Cocktail", "Casual", ...customOccasions, "Other"])).filter(Boolean) as string[];
@@ -141,7 +145,7 @@ export default function AddProductPage() {
   useEffect(() => {
     // Generate SKU automatically
     const selectedRegion = region === "Other" ? customRegion : region;
-    const selectedColor = colorFamily === "Other" ? customColorFamily : colorFamily;
+    const selectedColor = selectedColors.length > 0 ? selectedColors[0] : "";
 
     let regCode = REGION_CODES[selectedRegion];
     if (!regCode) {
@@ -155,13 +159,13 @@ export default function AddProductPage() {
 
     const numStr = String(skuNumber).padStart(3, "0");
     setSku(`RP-${colorCode}-${numStr}`);
-  }, [colorFamily, customColorFamily, skuNumber]);
+  }, [selectedColors, customColorFamily, skuNumber]);
 
   // Fetch stock counts to auto-increment SKU numbers
   useEffect(() => {
     const fetchLatestNumber = async () => {
       try {
-        const selectedColor = colorFamily === "Other" ? customColorFamily : colorFamily;
+        const selectedColor = selectedColors.length > 0 ? selectedColors[0] : "";
         let colorCode = COLOR_CODES[selectedColor];
         if (!colorCode) {
           colorCode = selectedColor ? selectedColor.slice(0, 3).toUpperCase() : "OTH";
@@ -177,7 +181,7 @@ export default function AddProductPage() {
       }
     };
     fetchLatestNumber();
-  }, [colorFamily, customColorFamily]);
+  }, [selectedColors, customColorFamily]);
 
   // Live Margin Calculation
   const priceVal = parseFloat(price) || 0;
@@ -193,28 +197,32 @@ export default function AddProductPage() {
 
   // Image Upload handler
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploadingImage(true);
-    const formData = new FormData();
-    formData.append("file", file);
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      formData.append("file", file);
 
-    try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      try {
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
 
-      if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json();
-      setImages(prev => [...prev, data]);
-      setMediaStatuses(prev => ({ ...prev, [data.id]: { status: "queued" } }));
-    } catch (err) {
-      alert("Image upload failed: " + (err as Error).message);
-    } finally {
-      setUploadingImage(false);
+        if (!res.ok) throw new Error("Upload failed");
+        const data = await res.json();
+        setImages(prev => [...prev, data]);
+        setMediaStatuses(prev => ({ ...prev, [data.id]: { status: "queued" } }));
+      } catch (err) {
+        alert("Image upload failed: " + (err as Error).message);
+      }
     }
+    
+    setUploadingImage(false);
   };
 
   // Video Upload handler
@@ -300,7 +308,13 @@ export default function AddProductPage() {
     const finalFabric = fabric === "Other" ? customFabric.trim() : fabric;
     const finalWeave = weave === "Other" ? customWeave.trim() : weave;
     const finalOccasion = occasion === "Other" ? customOccasion.trim() : occasion;
-    const finalColorFamily = colorFamily === "Other" ? customColorFamily.trim() : colorFamily;
+    let finalColors = [...selectedColors];
+    if (showCustomColor && customColorFamily.trim()) {
+      if (!finalColors.includes(customColorFamily.trim())) {
+        finalColors.push(customColorFamily.trim());
+      }
+    }
+    const finalColorFamily = finalColors.join(", ");
 
     // Check mandatory fields
     if (!finalColorFamily) {
@@ -324,7 +338,7 @@ export default function AddProductPage() {
       (fabric === "Other" && !finalFabric) ||
       (weave === "Other" && !finalWeave) ||
       (occasion === "Other" && !finalOccasion) ||
-      (colorFamily === "Other" && !finalColorFamily)
+      (!finalColorFamily)
     ) {
       alert("❌ Error: Please specify a custom text name for the fields selected as 'Other'.");
       setLoading(false);
@@ -362,7 +376,7 @@ export default function AddProductPage() {
           body: JSON.stringify({ type: "occasions", value: finalOccasion })
         }));
       }
-      if (colorFamily === "Other") {
+      if (showCustomColor && customColorFamily.trim()) {
         savePromises.push(fetch("/api/options", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -422,6 +436,24 @@ export default function AddProductPage() {
     }
   };
 
+  const fillDemoData = () => {
+    setTitle("Demo Handwoven Kanjeevaram Silk Saree");
+    setDescription("This is a beautiful demo saree generated for testing purposes. It features intricate zari work and a heavy pallu.");
+    setPrice("15000");
+    setCompareAtPrice("20000");
+    setCostPrice("8000");
+    setStock("5");
+    setRegion("Kanchipuram");
+    setSelectedColors(["Red"]);
+    setFabric("Pure Silk");
+    setWeave("Kadhua");
+    setOccasion("Bridal");
+    setBlouseIncluded(true);
+    setBlouseLength("0.8 meters");
+    setSareeLength("6.0");
+    setWashCare("Dry clean only.");
+  };
+
   return (
     <div className="flex min-h-screen bg-[#FAF8F5]">
       <Sidebar />
@@ -444,14 +476,24 @@ export default function AddProductPage() {
                   <option value="ACTIVE">Active (Publish Live)</option>
                 </select>
               </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn-primary flex items-center gap-1.5 py-2 px-6 text-xs uppercase tracking-wider font-semibold shadow-md"
-              >
-                <Save size={14} />
-                {loading ? "Publishing Saree..." : "Save Product"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={fillDemoData}
+                  className="btn-secondary flex items-center gap-1.5 py-2 px-4 text-xs uppercase tracking-wider font-semibold"
+                >
+                  <Sparkles size={14} />
+                  Demo Data
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn-primary flex items-center gap-1.5 py-2 px-6 text-xs uppercase tracking-wider font-semibold shadow-md"
+                >
+                  <Save size={14} />
+                  {loading ? "Publishing Saree..." : "Save Product"}
+                </button>
+              </div>
             </div>
 
             {/* Core Saree Details Card */}
@@ -564,6 +606,7 @@ export default function AddProductPage() {
                   <input
                     type="number"
                     required
+                    min="0"
                     value={stock}
                     onChange={(e) => setStock(e.target.value)}
                     placeholder="1"
@@ -617,21 +660,53 @@ export default function AddProductPage() {
                 {/* Color Family */}
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-bold uppercase text-[#1A1A1A]/70 flex items-center gap-1">
-                    Color Family
+                    Color Families
                     <span className="text-[10px] text-red-500 font-bold">* Required</span>
                   </label>
-                  <select value={colorFamily} onChange={(e) => setColorFamily(e.target.value)} className="glass-input bg-white border-red-500/20">
-                    <option value="">None Selected</option>
-                    {colorFamilyOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  {colorFamily === "Other" && (
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {colorFamilyOptions.filter(c => c !== "Other").map(c => {
+                      const isSelected = selectedColors.includes(c);
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedColors(prev => prev.filter(color => color !== c));
+                            } else {
+                              setSelectedColors(prev => [...prev, c]);
+                            }
+                          }}
+                          className={`px-3 py-1 rounded-full text-[11px] font-medium transition-colors border ${
+                            isSelected 
+                              ? 'bg-[#4A154B] text-white border-[#4A154B]' 
+                              : 'bg-white text-soft-black border-soft-black/20 hover:border-soft-black/40'
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomColor(!showCustomColor)}
+                      className={`px-3 py-1 rounded-full text-[11px] font-medium transition-colors border ${
+                        showCustomColor 
+                          ? 'bg-[#4A154B] text-white border-[#4A154B]' 
+                          : 'bg-white text-soft-black border-dashed border-soft-black/30 hover:border-soft-black/50'
+                      }`}
+                    >
+                      + Custom
+                    </button>
+                  </div>
+                  {showCustomColor && (
                     <input
                       type="text"
                       required
                       value={customColorFamily}
                       onChange={(e) => setCustomColorFamily(e.target.value)}
                       placeholder="Type custom color..."
-                      className="glass-input mt-1.5 focus:border-[#4A154B] text-xs"
+                      className="glass-input mt-2 focus:border-[#4A154B] text-xs"
                     />
                   )}
                 </div>
@@ -828,6 +903,7 @@ export default function AddProductPage() {
                     
                     <input 
                       type="file" 
+                      multiple
                       accept="image/*" 
                       onChange={handleImageUpload} 
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"

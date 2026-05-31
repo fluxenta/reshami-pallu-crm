@@ -85,7 +85,11 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
   // Metafields
   const [fabric, setFabric] = useState(initialProduct.metafields.fabric || "Pure Silk");
   const [weave, setWeave] = useState(initialProduct.metafields.weave || "Kadhua");
-  const [colorFamily, setColorFamily] = useState(initialProduct.metafields.colorFamily || "Red");
+  const [selectedColors, setSelectedColors] = useState<string[]>(
+    initialProduct.metafields.colorFamily 
+      ? initialProduct.metafields.colorFamily.split(",").map((c: string) => c.trim()).filter(Boolean)
+      : ["Red"]
+  );
   const [occasion, setOccasion] = useState(initialProduct.metafields.occasion || "Bridal");
   const [region, setRegion] = useState(initialProduct.metafields.region || "Banaras");
   const [blouseIncluded, setBlouseIncluded] = useState(initialProduct.metafields.blouseIncluded ?? true);
@@ -108,6 +112,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
   const [customWeave, setCustomWeave] = useState("");
   const [customOccasion, setCustomOccasion] = useState("");
   const [customColorFamily, setCustomColorFamily] = useState("");
+  const [showCustomColor, setShowCustomColor] = useState(false);
 
   // Load custom options on page mount
   useEffect(() => {
@@ -131,7 +136,11 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
 
   // Selector dynamic lists (injected with initial values dynamically to guarantee selection compatibility)
   const regionOptions = Array.from(new Set(["Banaras", "Kanchipuram", "Chanderi", "Kalamkari", "Mysore", ...customRegions, initialProduct.metafields.region, "Other"])).filter(Boolean) as string[];
-  const colorFamilyOptions = Array.from(new Set(["Red", "Blue", "Green", "Gold", "Silver", "Pink", "White", "Black", "Maroon", "Purple", "Cream", "Orange", "Yellow", "Turquoise", ...customColorFamilies, initialProduct.metafields.colorFamily, "Other"])).filter(Boolean) as string[];
+  const colorFamilyOptions = Array.from(new Set([
+    "Red", "Blue", "Green", "Gold", "Silver", "Pink", "White", "Black", "Maroon", "Purple", "Cream", "Orange", "Yellow", "Turquoise", 
+    ...customColorFamilies, 
+    ...(initialProduct.metafields.colorFamily ? initialProduct.metafields.colorFamily.split(",").map((c: string) => c.trim()) : [])
+  ])).filter(Boolean) as string[];
   const fabricOptions = Array.from(new Set(["Pure Katan Silk", "Pure Silk", "Chanderi Silk", "Georgette", "Organza", "Tissue Silk", "Cotton", ...customFabrics, initialProduct.metafields.fabric, "Other"])).filter(Boolean) as string[];
   const weaveOptions = Array.from(new Set(["Kadhua", "Jamdani", "Ikat", "Meenakari", "Fekwa", ...customWeaves, initialProduct.metafields.weave, "Other"])).filter(Boolean) as string[];
   const occasionOptions = Array.from(new Set(["Bridal", "Festive", "Cocktail", "Casual", ...customOccasions, initialProduct.metafields.occasion, "Other"])).filter(Boolean) as string[];
@@ -148,28 +157,32 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploadingImage(true);
-    const formData = new FormData();
-    formData.append("file", file);
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      formData.append("file", file);
 
-    try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      try {
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
 
-      if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json();
-      setImages(prev => [...prev, data]);
-      setMediaStatuses(prev => ({ ...prev, [data.id]: { status: "queued" } }));
-    } catch (err) {
-      alert("Image upload failed: " + (err as Error).message);
-    } finally {
-      setUploadingImage(false);
+        if (!res.ok) throw new Error("Upload failed");
+        const data = await res.json();
+        setImages(prev => [...prev, data]);
+        setMediaStatuses(prev => ({ ...prev, [data.id]: { status: "queued" } }));
+      } catch (err) {
+        alert("Image upload failed: " + (err as Error).message);
+      }
     }
+    
+    setUploadingImage(false);
   };
 
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -252,7 +265,13 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
     const finalFabric = fabric === "Other" ? customFabric.trim() : fabric;
     const finalWeave = weave === "Other" ? customWeave.trim() : weave;
     const finalOccasion = occasion === "Other" ? customOccasion.trim() : occasion;
-    const finalColorFamily = colorFamily === "Other" ? customColorFamily.trim() : colorFamily;
+    let finalColors = [...selectedColors];
+    if (showCustomColor && customColorFamily.trim()) {
+      if (!finalColors.includes(customColorFamily.trim())) {
+        finalColors.push(customColorFamily.trim());
+      }
+    }
+    const finalColorFamily = finalColors.join(", ");
 
     // Check mandatory fields
     if (!finalColorFamily) {
@@ -276,7 +295,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
       (fabric === "Other" && !finalFabric) ||
       (weave === "Other" && !finalWeave) ||
       (occasion === "Other" && !finalOccasion) ||
-      (colorFamily === "Other" && !finalColorFamily)
+      (!finalColorFamily)
     ) {
       alert("❌ Error: Please specify a custom text name for the fields selected as 'Other'.");
       setLoading(false);
@@ -314,7 +333,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
           body: JSON.stringify({ type: "occasions", value: finalOccasion })
         }));
       }
-      if (colorFamily === "Other") {
+      if (showCustomColor && customColorFamily.trim()) {
         savePromises.push(fetch("/api/options", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -514,6 +533,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
             <input
               type="number"
               required
+              min="0"
               value={stock}
               onChange={(e) => setStock(e.target.value)}
               className="glass-input text-center font-bold"
@@ -566,21 +586,53 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
           {/* Color Family */}
           <div className="flex flex-col gap-2">
             <label className="text-xs font-bold uppercase text-[#1A1A1A]/70 flex items-center gap-1">
-              Color Family
+              Color Families
               <span className="text-[10px] text-red-500 font-bold">* Required</span>
             </label>
-            <select value={colorFamily} onChange={(e) => setColorFamily(e.target.value)} className="glass-input bg-white border-red-500/20">
-              <option value="">None Selected</option>
-              {colorFamilyOptions.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            {colorFamily === "Other" && (
+            <div className="flex flex-wrap gap-2 mt-1">
+              {colorFamilyOptions.filter(c => c !== "Other").map(c => {
+                const isSelected = selectedColors.includes(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedColors(prev => prev.filter(color => color !== c));
+                      } else {
+                        setSelectedColors(prev => [...prev, c]);
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-full text-[11px] font-medium transition-colors border ${
+                      isSelected 
+                        ? 'bg-[#4A154B] text-white border-[#4A154B]' 
+                        : 'bg-white text-soft-black border-soft-black/20 hover:border-soft-black/40'
+                    }`}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setShowCustomColor(!showCustomColor)}
+                className={`px-3 py-1 rounded-full text-[11px] font-medium transition-colors border ${
+                  showCustomColor 
+                    ? 'bg-[#4A154B] text-white border-[#4A154B]' 
+                    : 'bg-white text-soft-black border-dashed border-soft-black/30 hover:border-soft-black/50'
+                }`}
+              >
+                + Custom
+              </button>
+            </div>
+            {showCustomColor && (
               <input
                 type="text"
                 required
                 value={customColorFamily}
                 onChange={(e) => setCustomColorFamily(e.target.value)}
                 placeholder="Type custom color..."
-                className="glass-input mt-1.5 focus:border-[#4A154B] text-xs"
+                className="glass-input mt-2 focus:border-[#4A154B] text-xs"
               />
             )}
           </div>
@@ -771,6 +823,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
               </span>
               <input 
                 type="file" 
+                multiple
                 accept="image/*" 
                 onChange={handleImageUpload} 
                 className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"

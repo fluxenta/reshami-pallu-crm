@@ -71,7 +71,7 @@ export default function InventoryGrid({ initialProducts }: InventoryGridProps) {
     // 5. Stock
     const matchesStock = 
       stockFilter === "ALL" || 
-      (stockFilter === "OUT" && p.stock === 0) || 
+      (stockFilter === "OUT" && p.stock <= 0) || 
       (stockFilter === "LOW" && p.stock > 0 && p.stock < 3) ||
       (stockFilter === "OK" && p.stock >= 3);
 
@@ -246,14 +246,16 @@ export default function InventoryGrid({ initialProducts }: InventoryGridProps) {
 
                       {/* Stock */}
                       <td className="p-4 text-center">
-                        <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] ${
-                          p.stock === 0 
+                        <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] whitespace-nowrap ${
+                          p.stock < 0 
+                            ? 'bg-red-600 text-white border border-red-700 shadow-sm'
+                            : p.stock === 0 
                             ? 'bg-red-50 text-red-600 border border-red-100' 
                             : p.stock < 3 
                             ? 'bg-[#D4AF37]/5 text-[#4A154B] border border-[#D4AF37]/20' 
                             : 'bg-green-50 text-green-700 border border-green-100'
                         }`}>
-                          {p.stock === 0 ? "Out of Stock" : `${p.stock} pcs`}
+                          {p.stock < 0 ? `Oversold (${p.stock})` : p.stock === 0 ? "Out of Stock" : `${p.stock} pcs`}
                         </span>
                       </td>
 
