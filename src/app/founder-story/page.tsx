@@ -6,9 +6,10 @@ import Header from "@/components/layout/Header";
 import { Sparkles, UploadCloud, Save, Image as ImageIcon, CheckCircle, RefreshCw } from "lucide-react";
 
 interface MediaStatus {
-  status: "queued" | "processing" | "success" | "failed";
+  status: "queued" | "processing" | "success" | "completed" | "failed";
   shopifyUrl?: string | null;
   error?: string | null;
+  base64Key?: string | null;
 }
 
 export default function FounderStoryAdminPage() {
@@ -19,6 +20,7 @@ export default function FounderStoryAdminPage() {
   const [uploading, setUploading] = useState(false);
   const [mediaId, setMediaId] = useState<string | null>(null);
   const [mediaStatus, setMediaStatus] = useState<MediaStatus | null>(null);
+  const [uploadedBase64Key, setUploadedBase64Key] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch current story data from Redis via our API
@@ -53,10 +55,12 @@ export default function FounderStoryAdminPage() {
             status: data.status,
             shopifyUrl: data.shopifyUrl,
             error: data.error,
+            base64Key: data.base64Key,
           });
 
           if ((data.status === "success" || data.status === "completed") && data.shopifyUrl) {
             setImageUrl(data.shopifyUrl);
+            if (data.base64Key) setUploadedBase64Key(data.base64Key);
             setMediaId(null); // Stop polling
             setMediaStatus(null);
             setUploading(false);
@@ -106,7 +110,7 @@ export default function FounderStoryAdminPage() {
       const res = await fetch("/api/founder-story", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, image: imageUrl }),
+        body: JSON.stringify({ text, image: imageUrl, imageBase64Key: uploadedBase64Key }),
       });
 
       if (res.ok) {
