@@ -598,7 +598,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
             <span className={`text-[10px] uppercase font-bold tracking-wider transition-colors duration-300 ${
               step === 2 ? "text-[#4A154B]" : "text-[#1A1A1A]/40"
             }`}>
-              2. Media &amp; AI twins
+              2. Media Assets
             </span>
           </button>
 
@@ -1024,7 +1024,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
           </div>
         )}
 
-        {/* STEP 2: Media Assets & AI Digital Twin Studio */}
+        {/* STEP 2: Media Assets */}
         {step === 2 && (
           <div className="space-y-6 animate-fadeIn">
             
@@ -1164,217 +1164,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
               </div>
             </div>
 
-            {/* AI Digital Twin Studio (Disabled for Customer) */}
-            {false && images.length > 0 && (
-              <div className="border border-[#D4AF37]/35 bg-white/40 backdrop-blur-md rounded-3xl p-6 sm:p-8 space-y-8 shadow-lg animate-slideUp">
-                <div className="flex items-center justify-between border-b border-[#D4AF37]/20 pb-4">
-                  <div className="space-y-1">
-                    <h4 className="font-display font-bold text-base text-[#4A154B] flex items-center gap-1.5">
-                      <Sparkles size={18} className="text-[#D4AF37] animate-pulse" />
-                      AI Digital Twin Studio
-                    </h4>
-                    <p className="text-xs text-[#1A1A1A]/60">Drape your exact handwoven saree onto high-end models automatically.</p>
-                  </div>
-                  <span className="text-[10px] font-bold bg-[#D4AF37]/15 text-[#4A154B] px-3 py-1 rounded-full border border-[#D4AF37]/30 shadow-sm">
-                    gemini-3.1-flash-image enabled
-                  </span>
-                </div>
 
-                <div className="space-y-6">
-                  {/* Avatar Option */}
-                  <div className="space-y-3">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A]/70 block">1. Model Avatar Selection</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {[
-                        { id: "Dusky Indian skin tone", label: "Dusky", sub: "Rich & Radiant", color: "from-[#8C6239] to-[#5C3A21]", border: "border-[#8C6239]/40" },
-                        { id: "Olive Indian skin tone", label: "Olive", sub: "Warm & Elegant", color: "from-[#C49A45] to-[#8C6B23]", border: "border-[#C49A45]/40" },
-                        { id: "Fair Indian skin tone", label: "Fair", sub: "Bright & Classic", color: "from-[#F5D6B5] to-[#D4B28C]", border: "border-[#F5D6B5]/40" }
-                      ].map((tone) => {
-                        const isSelected = modelTone === tone.id;
-                        return (
-                          <button
-                            key={tone.id}
-                            type="button"
-                            onClick={() => setModelTone(tone.id)}
-                            className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all duration-300 !cursor-pointer ${
-                              isSelected
-                                ? "bg-[#4A154B] border-[#4A154B] text-white shadow-md scale-[1.02]"
-                                : "bg-white/80 border-gray-200 hover:border-[#4A154B]/30 hover:bg-white text-[#1A1A1A]"
-                            }`}
-                          >
-                            <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${tone.color} ${tone.border} border shadow-inner flex-shrink-0`} />
-                            <div className="min-w-0">
-                              <div className="text-xs font-bold leading-tight">{tone.label}</div>
-                              <div className={`text-[9px] truncate leading-none mt-0.5 ${isSelected ? "text-white/70" : "text-[#1A1A1A]/40"}`}>{tone.sub}</div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Shoot Vibe / Background */}
-                  <div className="space-y-3">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A]/70 block">2. Shoot Location Vibe</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {[
-                        { id: "royal heritage Indian palace courtyard, sandstone arches, warm natural sunlight", name: "Royal Palace", desc: "Sandstone arches", color: "border-amber-200 bg-amber-50/30 hover:bg-amber-50/60" },
-                        { id: "minimalist modern light-filled studio, terracotta planters, soft shadows", name: "Minimal Studio", desc: "Modern terracotta", color: "border-orange-200 bg-orange-50/30 hover:bg-orange-50/60" },
-                        { id: "sunlit outdoor lush green garden with white bougainvillea archways", name: "Lush Garden", desc: "Bougainvillea arches", color: "border-emerald-200 bg-emerald-50/30 hover:bg-emerald-50/60" },
-                        { id: "luxury indoor minimalist living space, aesthetic wooden panels, warm spotlighting", name: "Luxury Loft", desc: "Warm spotlights", color: "border-stone-200 bg-stone-50/30 hover:bg-stone-50/60" }
-                      ].map((vibe) => {
-                        const isSelected = backgroundVibe === vibe.id;
-                        return (
-                          <button
-                            key={vibe.id}
-                            type="button"
-                            onClick={() => setBackgroundVibe(vibe.id)}
-                            className={`flex flex-col p-4 rounded-2xl border text-left transition-all duration-300 !cursor-pointer ${
-                              isSelected
-                                ? "bg-[#4A154B] border-[#4A154B] text-white shadow-md scale-[1.02]"
-                                : `bg-white/80 border-gray-200 ${vibe.color} text-[#1A1A1A]`
-                            }`}
-                          >
-                            <span className="text-xs font-bold leading-tight">{vibe.name}</span>
-                            <span className={`text-[9px] mt-1 ${isSelected ? "text-white/70" : "text-[#1A1A1A]/50"}`}>{vibe.desc}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Number of Generations & Multi-Pose Selection Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2 border-t border-[#D4AF37]/15">
-                    {/* Count Selector */}
-                    <div className="space-y-3 flex flex-col justify-start">
-                      <label className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A]/70 block">
-                        3. Number of Shoots
-                      </label>
-                      <div className="flex gap-1.5 p-1 bg-white/60 border border-gray-200 rounded-2xl w-full max-w-[240px]">
-                        {[1, 2, 3, 4].map((num) => {
-                          const isSelected = generationCount === num;
-                          return (
-                            <button
-                              key={num}
-                              type="button"
-                              onClick={() => handleGenerationCountChange(num)}
-                              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all duration-300 !cursor-pointer ${
-                                isSelected
-                                  ? "bg-[#4A154B] text-white shadow-sm"
-                                  : "hover:bg-white text-[#1A1A1A]/60"
-                              }`}
-                            >
-                              {num}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <span className="text-[10px] text-[#1A1A1A]/40 leading-relaxed block">
-                        Choose up to 4 distinct angles to generate concurrently.
-                      </span>
-                    </div>
-
-                    {/* Pose Choices Grid */}
-                    <div className="space-y-3 md:col-span-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A]/70 flex items-center justify-between">
-                        <span>4. Select Model Pose Angles</span>
-                        <span className="text-[10px] text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-md border border-green-200/50">
-                          Selected: {selectedPoses.length} / {generationCount}
-                        </span>
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {[
-                          { id: "Front Pleats Detail", name: "Front Pleats Detail", desc: "Drape folds & border details" },
-                          { id: "Back View Drape", name: "Back View Drape", desc: "Silhouette, pleating & overall fall" },
-                          { id: "Pallu Fall Close-up", name: "Pallu Fall Close-up", desc: "Main artwork & motifs showcase" },
-                          { id: "Macro Fabric Detail", name: "Macro Fabric Detail", desc: "Close-up weave textures & sparkle" }
-                        ].map((pose) => {
-                          const isSelected = selectedPoses.includes(pose.id);
-                          return (
-                            <button
-                              key={pose.id}
-                              type="button"
-                              onClick={() => togglePose(pose.id)}
-                              className={`flex items-center gap-3 p-3 rounded-2xl border text-left transition-all duration-300 !cursor-pointer ${
-                                isSelected
-                                  ? "bg-[#4A154B]/5 border-[#4A154B] text-[#4A154B] ring-2 ring-[#4A154B]/10 shadow-sm"
-                                  : "bg-white/80 border-gray-200 hover:border-gray-300 text-[#1A1A1A]"
-                              }`}
-                            >
-                              <div className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 ${
-                                isSelected ? "bg-[#4A154B] border-[#4A154B] text-white" : "border-gray-300 bg-white"
-                              }`}>
-                                {isSelected && <span className="text-[10px] leading-none">✓</span>}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-bold truncate leading-tight">{pose.name}</div>
-                                <div className="text-[9px] text-[#1A1A1A]/40 truncate leading-none mt-0.5">{pose.desc}</div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Saree Weave prompt overrides */}
-                  <div className="flex flex-col gap-2 pt-2 border-t border-[#D4AF37]/15">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A]/70 flex items-center justify-between">
-                      <span>5. Customize Fabric Prompt (Optional)</span>
-                      <span className="text-[10px] text-[#1A1A1A]/40 font-normal lowercase italic">We automatically analyze and fill this if left empty</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={customAiPrompt}
-                      onChange={(e) => setCustomAiPrompt(e.target.value)}
-                      placeholder="e.g. A gorgeous red silk saree with gold zardozi scalloped borders and intricate floral jaal print..."
-                      className="glass-input text-xs"
-                    />
-                  </div>
-
-                  {/* Display sync settings */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center bg-white/40 border border-[#D4AF37]/15 p-4 rounded-2xl">
-                    <div className="md:col-span-2 space-y-1">
-                      <label className="text-xs font-bold text-[#4A154B] uppercase tracking-wide block">6. Storefront Display Filter</label>
-                      <span className="text-[10px] text-[#1A1A1A]/50 block">Filter out raw flat photos automatically in Shopify if you only want models visible.</span>
-                    </div>
-                    
-                    <select
-                      value={displayMode}
-                      onChange={(e) => setDisplayMode(e.target.value as any)}
-                      className="glass-input bg-white text-xs font-bold !cursor-pointer"
-                    >
-                      <option value="both">Show Both: Raw + Model</option>
-                      <option value="model_only">AI Model ONLY (Hide Raw)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* AI trigger */}
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="button"
-                    disabled={aiLoading}
-                    onClick={handleAiGeneration}
-                    className={`btn-primary py-3 px-8 text-xs uppercase tracking-wider font-bold shadow-md bg-[#4A154B] border-[#4A154B] hover:bg-[#4A154B]/90 flex items-center gap-2 ${
-                      aiLoading ? "opacity-50 !cursor-not-allowed" : "!cursor-pointer"
-                    }`}
-                  >
-                    {aiLoading ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Generating Twin Shoot ({selectedPoses.length} Poses)...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={14} className="text-[#D4AF37] animate-pulse" />
-                        Run AI Model Shoot
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Back / Next Buttons */}
             <div className="flex justify-between pt-4">
@@ -1426,17 +1216,11 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
                 <div className="flex items-center gap-3.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-[#4A154B]/10 scrollbar-track-transparent">
                   {/* Images */}
                   {images.map((img, index) => {
-                    const isAi = img.id.startsWith("media_ai_");
                     const status = mediaStatuses[img.id]?.status || "ready";
                     const isSyncing = status === "queued" || status === "processing";
                     return (
                       <div key={img.id || index} className="relative aspect-[2/3] w-20 rounded-xl overflow-hidden border border-[#4A154B]/10 bg-white flex-shrink-0 shadow-sm group">
                         <img src={img.url} alt={`Preview ${index + 1}`} className="object-cover w-full h-full" />
-                        {isAi && (
-                          <span className="absolute bottom-1 left-1 right-1 text-[8px] font-bold text-center bg-[#4A154B] text-[#D4AF37] px-1 py-0.5 rounded shadow-sm border border-[#D4AF37]/20 uppercase">
-                            AI Twin
-                          </span>
-                        )}
                         {isSyncing && (
                           <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-center">
                             <span className="text-[8px] font-bold text-white uppercase animate-pulse">Sync...</span>
@@ -1669,7 +1453,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
                   className="btn-secondary py-3 px-6 text-xs uppercase tracking-wider font-bold flex items-center gap-2 !cursor-pointer"
                 >
                   <ArrowLeft size={14} />
-                  Back: Media twins
+                  Back: Media Assets
                 </button>
 
                 <button

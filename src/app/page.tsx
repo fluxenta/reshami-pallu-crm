@@ -147,27 +147,19 @@ export default async function DashboardPage() {
                   Namaste, Mrinalini!
                 </h3>
                 <p className="text-sm text-white/80 max-w-xl">
-                  Welcome back to your curation suite. Let&apos;s manage your beautiful, handwoven luxury sarees and craft stunning digital twins today.
+                  Welcome back to your curation suite. Let&apos;s manage your beautiful, handwoven luxury sarees and refresh your storefront today.
                 </p>
               </div>
             </div>
 
             {/* Premium quick shortcut grids designed for non-technical users */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8 pt-6 border-t border-white/10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 pt-6 border-t border-white/10">
               <Link href="/products/add" className="group flex flex-col p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-[#D4AF37]/50 hover:bg-white/10 transition-all duration-300 no-underline text-white">
                 <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37] mb-3 group-hover:scale-110 transition-transform">
                   <PlusCircle size={20} />
                 </div>
                 <span className="text-xs font-bold tracking-wide">Add a Saree</span>
                 <span className="text-[10px] text-white/60 mt-1">Design a new saree style & push to shop</span>
-              </Link>
-
-              <Link href="/products/add#ai-studio" className="group flex flex-col p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-[#D4AF37]/50 hover:bg-white/10 transition-all duration-300 no-underline text-white">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300 mb-3 group-hover:scale-110 transition-transform">
-                  <Sparkles size={20} />
-                </div>
-                <span className="text-xs font-bold tracking-wide">AI Digital Twin Shoot</span>
-                <span className="text-[10px] text-white/60 mt-1">Generate draped professional model shoots</span>
               </Link>
 
               <Link href="/bulk-upload" className="group flex flex-col p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-[#D4AF37]/50 hover:bg-white/10 transition-all duration-300 no-underline text-white">
