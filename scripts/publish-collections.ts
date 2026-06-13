@@ -1,3 +1,23 @@
+import fs from "fs";
+import path from "path";
+
+// Manually load environment variables from .env.local
+const envPath = path.resolve(process.cwd(), ".env.local");
+if (fs.existsSync(envPath)) {
+  const envConfig = fs.readFileSync(envPath, "utf-8");
+  for (const line of envConfig.split("\n")) {
+    const matched = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (matched) {
+      const key = matched[1];
+      let value = (matched[2] || "").trim();
+      if (value.startsWith('"') && value.endsWith('"')) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  }
+}
+
 import { shopifyCollection } from "../src/lib/shopify";
 import { shopifyAdminFetch } from "../src/lib/shopify";
 

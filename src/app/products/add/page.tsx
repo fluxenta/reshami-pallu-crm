@@ -198,33 +198,14 @@ export default function AddProductPage() {
 
   useEffect(() => {
     // Generate SKU automatically
-    const selectedRegion = region === "Other" ? customRegion : region;
-    const selectedColor = selectedColors.length > 0 ? selectedColors[0] : "";
-
-    let regCode = REGION_CODES[selectedRegion];
-    if (!regCode) {
-      regCode = selectedRegion ? selectedRegion.slice(0, 3).toUpperCase() : "OTH";
-    }
-
-    let colorCode = COLOR_CODES[selectedColor];
-    if (!colorCode) {
-      colorCode = selectedColor ? selectedColor.slice(0, 3).toUpperCase() : "OTH";
-    }
-
-    const numStr = String(skuNumber).padStart(3, "0");
-    setSku(`RP-${colorCode}-${numStr}`);
-  }, [selectedColors, customColorFamily, skuNumber]);
+    setSku(`RP-INV-${skuNumber}`);
+  }, [skuNumber]);
 
   // Fetch stock counts to auto-increment SKU numbers
   useEffect(() => {
     const fetchLatestNumber = async () => {
       try {
-        const selectedColor = selectedColors.length > 0 ? selectedColors[0] : "";
-        let colorCode = COLOR_CODES[selectedColor];
-        if (!colorCode) {
-          colorCode = selectedColor ? selectedColor.slice(0, 3).toUpperCase() : "OTH";
-        }
-        const res = await fetch("/api/products/sku-count?color=" + encodeURIComponent(colorCode));
+        const res = await fetch("/api/products/sku-count?color=INV");
         if (res.ok) {
           const data = await res.json();
           setSkuNumber(data.count + 1);
@@ -235,7 +216,7 @@ export default function AddProductPage() {
       }
     };
     fetchLatestNumber();
-  }, [selectedColors, customColorFamily]);
+  }, []);
 
   // Live Margin Calculation
   const priceVal = parseFloat(price) || 0;

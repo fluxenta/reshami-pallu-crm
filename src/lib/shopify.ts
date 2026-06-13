@@ -669,7 +669,7 @@ export const shopifySaree = {
       // 2. Add new media
       if (newImages.length > 0) {
         const mediaInput = newImages.map((img: any) => ({
-          originalSource: (img.id && img.id.startsWith("gid://")) ? img.id : img.url,
+          originalSource: img.url,
           mediaContentType: "IMAGE"
         }));
 
