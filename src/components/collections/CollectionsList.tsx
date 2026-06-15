@@ -196,7 +196,7 @@ export default function CollectionsList({ initialCollections }: CollectionsListP
               onClick={() => applyTemplate("Royal Banarasi Sarees", "Banarasi")}
               className="w-full text-left p-2.5 rounded-lg border border-[#4A154B]/10 hover:bg-[#4A154B]/5 hover:border-[#4A154B]/30 font-semibold text-[#4A154B] transition-all duration-200 cursor-pointer"
             >
-              🌸 Royal Banarasi (Region tag)
+              🌸 Royal Banarasi
             </button>
             <button 
               onClick={() => applyTemplate("Bridal Curation", "Bridal")}

@@ -5,8 +5,7 @@ export const revalidate = 0; // Disable server cache
 
 export async function GET() {
   try {
-    const [regions, fabrics, weaves, occasions, colorFamilies] = await Promise.all([
-      db.smembers("options:regions"),
+    const [fabrics, weaves, occasions, colorFamilies] = await Promise.all([
       db.smembers("options:fabrics"),
       db.smembers("options:weaves"),
       db.smembers("options:occasions"),
@@ -14,7 +13,6 @@ export async function GET() {
     ]);
 
     return NextResponse.json({
-      regions: regions || [],
       fabrics: fabrics || [],
       weaves: weaves || [],
       occasions: occasions || [],
@@ -34,7 +32,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing type or value" }, { status: 400 });
     }
 
-    const validTypes = ["regions", "fabrics", "weaves", "occasions", "colorFamilies"];
+    const validTypes = ["fabrics", "weaves", "occasions", "colorFamilies"];
     if (!validTypes.includes(type)) {
       return NextResponse.json({ error: "Invalid option type" }, { status: 400 });
     }

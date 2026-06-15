@@ -261,7 +261,6 @@ export async function POST(req: NextRequest) {
             weave: cleanWeave,
             colorFamily: cleanColors,
             occasion: cleanOccasion,
-            region: toTitleCase(item['region'] || item['regionoptional'] || 'Banaras'),
             blouseIncluded: item['blouseincluded']?.toUpperCase() === 'TRUE',
             blouseLength: item['blouselength'] || item['blouselengthoptional'] || '80cm',
             sareeLength: parseFloat(item['sareelength'] || '6.0').toFixed(1) + " meters",

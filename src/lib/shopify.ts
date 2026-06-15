@@ -123,7 +123,6 @@ export interface SareeProduct {
     weave?: string;
     colorFamily?: string;
     occasion?: string;
-    region?: string;
     blouseIncluded?: boolean;
     blouseLength?: string;
     washCare?: string;
@@ -193,7 +192,6 @@ const PRODUCT_FRAGMENT = `
     weave: metafield(namespace: "saree", key: "weave") { value }
     colorFamily: metafield(namespace: "saree", key: "color_family") { value }
     occasion: metafield(namespace: "saree", key: "occasion") { value }
-    region: metafield(namespace: "saree", key: "region") { value }
     blouseIncluded: metafield(namespace: "saree", key: "blouse_included") { value }
     blouseLength: metafield(namespace: "saree", key: "blouse_length") { value }
     washCareV2: metafield(namespace: "saree", key: "wash_care_v2") { value }
@@ -260,7 +258,6 @@ function mapShopifyProduct(node: any): SareeProduct {
       weave: node.weave?.value,
       colorFamily: node.colorFamily?.value,
       occasion: node.occasion?.value,
-      region: node.region?.value,
       blouseIncluded: node.blouseIncluded?.value === 'true',
       blouseLength: node.blouseLength?.value,
       washCare: node.washCareV2?.value || node.washCareLegacy?.value,
@@ -348,7 +345,6 @@ export const shopifySaree = {
       { namespace: "saree", key: "weave", value: saree.metafields.weave || '', type: "single_line_text_field" },
       { namespace: "saree", key: "color_family", value: saree.metafields.colorFamily || '', type: "single_line_text_field" },
       { namespace: "saree", key: "occasion", value: saree.metafields.occasion || '', type: "single_line_text_field" },
-      { namespace: "saree", key: "region", value: saree.metafields.region || '', type: "single_line_text_field" },
       { namespace: "saree", key: "blouse_included", value: saree.metafields.blouseIncluded ? 'true' : 'false', type: "single_line_text_field" },
       { namespace: "saree", key: "blouse_length", value: saree.metafields.blouseLength || '', type: "single_line_text_field" },
       { namespace: "saree", key: "wash_care_v2", value: saree.metafields.washCare || '', type: "multi_line_text_field" },
@@ -604,7 +600,6 @@ export const shopifySaree = {
       if (m.weave !== undefined) metafields.push({ namespace: "saree", key: "weave", value: m.weave, type: "single_line_text_field" });
       if (m.colorFamily !== undefined) metafields.push({ namespace: "saree", key: "color_family", value: m.colorFamily, type: "single_line_text_field" });
       if (m.occasion !== undefined) metafields.push({ namespace: "saree", key: "occasion", value: m.occasion, type: "single_line_text_field" });
-      if (m.region !== undefined) metafields.push({ namespace: "saree", key: "region", value: m.region, type: "single_line_text_field" });
       if (m.blouseIncluded !== undefined) metafields.push({ namespace: "saree", key: "blouse_included", value: m.blouseIncluded ? 'true' : 'false', type: "single_line_text_field" });
       if (m.blouseLength !== undefined) metafields.push({ namespace: "saree", key: "blouse_length", value: m.blouseLength, type: "single_line_text_field" });
       if (m.washCare !== undefined) metafields.push({ namespace: "saree", key: "wash_care_v2", value: m.washCare, type: "multi_line_text_field" });

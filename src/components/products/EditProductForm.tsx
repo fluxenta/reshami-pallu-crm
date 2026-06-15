@@ -18,15 +18,6 @@ import {
   Info
 } from "lucide-react";
 
-const REGION_CODES: Record<string, string> = {
-  "Banaras": "BNR",
-  "Kanchipuram": "KNP",
-  "Chanderi": "CHD",
-  "Kalamkari": "KLM",
-  "Mysore": "MYS",
-  "Other": "OTH"
-};
-
 const COLOR_CODES: Record<string, string> = {
   "Red": "RED",
   "Blue": "BLU",
@@ -149,7 +140,6 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
       : ["Red"]
   );
   const [occasion, setOccasion] = useState(initialProduct.metafields?.occasion || "Bridal");
-  const [region, setRegion] = useState(initialProduct.metafields?.region || "Banaras");
   const [blouseIncluded, setBlouseIncluded] = useState(initialProduct.metafields?.blouseIncluded ?? true);
   const [blouseLength, setBlouseLength] = useState(initialProduct.metafields?.blouseLength || "0.8 meters");
   const [sareeLength, setSareeLength] = useState(parseFloat(initialProduct.metafields?.sareeLength || "6.0").toFixed(1));
@@ -158,14 +148,12 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
   const [privateNotes, setPrivateNotes] = useState(initialProduct.privateNotes || "");
 
   // Dynamic Options lists loaded from Upstash Redis
-  const [customRegions, setCustomRegions] = useState<string[]>([]);
   const [customFabrics, setCustomFabrics] = useState<string[]>([]);
   const [customWeaves, setCustomWeaves] = useState<string[]>([]);
   const [customOccasions, setCustomOccasions] = useState<string[]>([]);
   const [customColorFamilies, setCustomColorFamilies] = useState<string[]>([]);
 
   // Text inputs for "Other" custom typed selections
-  const [customRegion, setCustomRegion] = useState("");
   const [customFabric, setCustomFabric] = useState("");
   const [customWeave, setCustomWeave] = useState("");
   const [customOccasion, setCustomOccasion] = useState("");
@@ -173,7 +161,6 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
   const [showCustomColor, setShowCustomColor] = useState(false);
 
   // Dynamic selector options
-  const regionOptions = Array.from(new Set(["Banaras", "Kanchipuram", "Chanderi", "Kalamkari", "Mysore", ...customRegions, "Other"])).filter(Boolean) as string[];
   const colorFamilyOptions = Array.from(new Set([
     "Red", "Blue", "Green", "Gold", "Silver", "Pink", "White", "Black", "Maroon", "Purple", "Cream", "Orange", "Yellow", "Turquoise", 
     ...customColorFamilies
@@ -187,7 +174,6 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
     fetch("/api/options")
       .then(res => res.json())
       .then(data => {
-        setCustomRegions(data.regions || []);
         setCustomFabrics(data.fabrics || []);
         setCustomWeaves(data.weaves || []);
         setCustomOccasions(data.occasions || []);
@@ -213,7 +199,6 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
     selectedColors.length > 0 && 
     fabric !== "" && 
     occasion !== "" &&
-    (region !== "Other" || customRegion.trim() !== "") &&
     (fabric !== "Other" || customFabric.trim() !== "") &&
     (weave !== "Other" || customWeave.trim() !== "") &&
     (occasion !== "Other" || customOccasion.trim() !== "");
@@ -419,7 +404,6 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
     e.preventDefault();
     setLoading(true);
 
-    const finalRegion = region === "Other" ? customRegion.trim() : region;
     const finalFabric = fabric === "Other" ? customFabric.trim() : fabric;
     const finalWeave = weave === "Other" ? customWeave.trim() : weave;
     const finalOccasion = occasion === "Other" ? customOccasion.trim() : occasion;
@@ -454,13 +438,6 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
     try {
       // 1. Save new custom options to Upstash Redis
       const savePromises = [];
-      if (region === "Other") {
-        savePromises.push(fetch("/api/options", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "regions", value: finalRegion })
-        }));
-      }
       if (fabric === "Other") {
         savePromises.push(fetch("/api/options", {
           method: "POST",
@@ -516,7 +493,6 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
           weave: finalWeave,
           colorFamily: finalColorFamily,
           occasion: finalOccasion,
-          region: finalRegion,
           blouseIncluded,
           blouseLength: blouseIncluded ? blouseLength : "",
           washCare,
@@ -864,42 +840,7 @@ export default function EditProductForm({ initialProduct }: EditProductFormProps
                   )}
                 </div>
 
-                {/* Region of Origin Grid Selection */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase text-[#1A1A1A]/70 flex items-center">
-                    Region of Origin Heritage
-                    <span className="text-[10px] text-[#1A1A1A]/40 font-normal lowercase italic ml-2">(Optional Heritage mapping)</span>
-                  </label>
-                  <div className="flex flex-wrap gap-2.5">
-                    {regionOptions.map((rOpt) => {
-                      const isSelected = region === rOpt;
-                      return (
-                        <button
-                          type="button"
-                          key={rOpt}
-                          onClick={() => setRegion(rOpt)}
-                          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all duration-200 border !cursor-pointer ${
-                            isSelected 
-                              ? 'bg-[#4A154B] text-[#D4AF37] border-[#4A154B] shadow-md scale-102' 
-                              : 'bg-white text-soft-black border-soft-black/10 hover:border-soft-black/25'
-                          }`}
-                        >
-                          {rOpt}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {region === "Other" && (
-                    <input
-                      type="text"
-                      required
-                      value={customRegion}
-                      onChange={(e) => setCustomRegion(e.target.value)}
-                      placeholder="Type custom region..."
-                      className="glass-input mt-2 max-w-md animate-fadeIn"
-                    />
-                  )}
-                </div>
+
 
                 {/* Color Families Selection with Hex Swatches */}
                 <div className="space-y-3 pt-2 border-t border-[#4A154B]/5">

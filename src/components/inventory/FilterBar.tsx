@@ -6,22 +6,20 @@ interface FilterValues {
   priceMax?: number;
   colour?: string;
   fabric?: string;
-  region?: string;
 }
 
 interface FilterBarProps {
   onChange: (filters: FilterValues) => void;
   availableColours?: string[];
   availableFabrics?: string[];
-  availableRegions?: string[];
 }
 
-export const FilterBar: React.FC<FilterBarProps> = ({ onChange, availableColours = [], availableFabrics = [], availableRegions = [] }) => {
+export const FilterBar: React.FC<FilterBarProps> = ({ onChange, availableColours = [], availableFabrics = [] }) => {
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
   const [colour, setColour] = useState('');
   const [fabric, setFabric] = useState('');
-  const [region, setRegion] = useState('');
+
 
   // Notify parent when any filter changes
   useEffect(() => {
@@ -30,10 +28,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({ onChange, availableColours
       priceMax: priceMax ? Number(priceMax) : undefined,
       colour: colour || undefined,
       fabric: fabric || undefined,
-      region: region || undefined,
     };
     onChange(filters);
-  }, [priceMin, priceMax, colour, fabric, region]);
+  }, [priceMin, priceMax, colour, fabric]);
 
   return (
     <div className={styles.filterBar}>
@@ -79,17 +76,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({ onChange, availableColours
           ))}
         </select>
       </div>
-      <div className={styles.filterGroup}>
-        <label htmlFor="region-select">Region</label>
-        <select id="region-select" value={region} onChange={e => setRegion(e.target.value)}>
-          <option value="">All</option>
-          {availableRegions.map(r => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
-      </div>
+
     </div>
   );
 };

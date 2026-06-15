@@ -163,21 +163,40 @@
 /* Filter Bar */
 .filterBar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 1.25rem;
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);
   padding: 1.25rem;
   border-radius: 1rem;
   box-shadow: 0 4px 16px rgba(0,0,0,0.04), inset 0 0 0 1px rgba(255,255,255,0.6);
   margin-bottom: 1.5rem;
+  scrollbar-width: thin;
+}
+
+.filterBar::-webkit-scrollbar {
+  height: 6px;
+}
+
+.filterBar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.filterBar::-webkit-scrollbar-thumb {
+  background: hsl(210, 20%, 80%);
+  border-radius: 3px;
+}
+
+.filterBar::-webkit-scrollbar-thumb:hover {
+  background: hsl(210, 20%, 70%);
 }
 
 .filterGroup {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-width: 140px;
+  flex: 0 0 auto;
+  min-width: 160px;
 }
 
 .filterGroup label {

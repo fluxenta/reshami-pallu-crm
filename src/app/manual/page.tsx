@@ -65,7 +65,6 @@ export default function ManualPage() {
                 </p>
                 <ul className="text-xs sm:text-sm text-[#1A1A1A]/75 space-y-1.5 list-disc list-inside pl-1">
                   <li><strong>Brand Code:</strong> <code className="font-mono text-[#4A154B] font-bold">RP</code> (Reshami Pallu)</li>
-                  <li><strong>Region:</strong> 3-letter origin abbreviation (e.g. <code className="font-mono">BNR</code> for Banaras)</li>
                   <li><strong>Color Family:</strong> 3-letter color code (e.g. <code className="font-mono">RED</code> for Red)</li>
                   <li><strong>Auto-Increment:</strong> Sequential active stock counter prevents any SKU duplicate conflicts.</li>
                 </ul>
@@ -115,7 +114,7 @@ export default function ManualPage() {
                 3. Custom "Other" selectors
               </h4>
               <p className="text-sm sm:text-base text-[#1A1A1A]/75 leading-relaxed">
-                Region of Origin, Fabric Type, Weave Style, Occasion Curation, and Color Family dropdown selectors are dynamic and persistent.
+                Fabric Type, Weave Style, Occasion Curation, and Color Family dropdown selectors are dynamic and persistent.
               </p>
               
               <div className="bg-[#FAF8F5]/80 border border-[#4A154B]/5 rounded-xl p-5 space-y-4">

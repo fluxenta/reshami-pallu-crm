@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ count: data.productsCount?.count || 0 });
   } catch (err: any) {
-    // If it fails or region is new, return a safe fallback default count
+    // If it fails or the color prefix is new, return a safe fallback default count
     return NextResponse.json({ count: 0 });
   }
 }

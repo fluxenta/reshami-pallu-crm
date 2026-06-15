@@ -23,12 +23,12 @@ export default function InventoryGrid({ initialProducts }: InventoryGridProps) {
   
   // Filters
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [regionFilter, setRegionFilter] = useState("ALL");
+
   const [fabricFilter, setFabricFilter] = useState("ALL");
   const [stockFilter, setStockFilter] = useState("ALL");
 
   // Filter unique values for selector dropdowns
-  const uniqueRegions = Array.from(new Set(initialProducts.map(p => p.metafields.region).filter(Boolean)));
+
   const uniqueFabrics = Array.from(new Set(initialProducts.map(p => p.metafields.fabric).filter(Boolean)));
 
   // Delete product handler
@@ -62,8 +62,7 @@ export default function InventoryGrid({ initialProducts }: InventoryGridProps) {
     // 2. Status
     const matchesStatus = statusFilter === "ALL" || p.status === statusFilter;
 
-    // 3. Region
-    const matchesRegion = regionFilter === "ALL" || p.metafields.region === regionFilter;
+
 
     // 4. Fabric
     const matchesFabric = fabricFilter === "ALL" || p.metafields.fabric === fabricFilter;
@@ -75,14 +74,14 @@ export default function InventoryGrid({ initialProducts }: InventoryGridProps) {
       (stockFilter === "LOW" && p.stock > 0 && p.stock < 3) ||
       (stockFilter === "OK" && p.stock >= 3);
 
-    return matchesSearch && matchesStatus && matchesRegion && matchesFabric && matchesStock;
+    return matchesSearch && matchesStatus && matchesFabric && matchesStock;
   });
 
   return (
     <div className="space-y-6">
       {/* Search and Filters Bar */}
       <div className="ui-card p-5 flex flex-col gap-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           
           {/* Search */}
           <div className="relative sm:col-span-2 lg:col-span-2">
@@ -98,17 +97,7 @@ export default function InventoryGrid({ initialProducts }: InventoryGridProps) {
             />
           </div>
 
-          {/* Region Filter */}
-          <div className="relative">
-            <select
-              value={regionFilter}
-              onChange={(e) => setRegionFilter(e.target.value)}
-              className="glass-input w-full bg-white appearance-none pr-8"
-            >
-              <option value="ALL">All Regions</option>
-              {uniqueRegions.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
+
 
           {/* Fabric Filter */}
           <div className="relative">
@@ -241,7 +230,6 @@ export default function InventoryGrid({ initialProducts }: InventoryGridProps) {
                       {/* Specs */}
                       <td className="p-4 leading-normal">
                         <span className="font-medium text-[#1A1A1A]/60 block">Fabric: {p.metafields.fabric}</span>
-                        <span className="text-[10px] text-[#1A1A1A]/40 block">Origin: {p.metafields.region}</span>
                       </td>
 
                       {/* Stock */}

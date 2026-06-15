@@ -20,15 +20,6 @@ import {
   Info
 } from "lucide-react";
 
-const REGION_CODES: Record<string, string> = {
-  "Banaras": "BNR",
-  "Kanchipuram": "KNP",
-  "Chanderi": "CHD",
-  "Kalamkari": "KLM",
-  "Mysore": "MYS",
-  "Other": "OTH"
-};
-
 const COLOR_CODES: Record<string, string> = {
   "Red": "RED",
   "Blue": "BLU",
@@ -140,7 +131,6 @@ export default function AddProductPage() {
   const [weave, setWeave] = useState("");
   const [selectedColors, setSelectedColors] = useState<string[]>(["Red"]);
   const [occasion, setOccasion] = useState("");
-  const [region, setRegion] = useState("");
   const [blouseIncluded, setBlouseIncluded] = useState(true);
   const [blouseLength, setBlouseLength] = useState("0.8 meters");
   const [sareeLength, setSareeLength] = useState("6.0");
@@ -149,14 +139,12 @@ export default function AddProductPage() {
   const [privateNotes, setPrivateNotes] = useState("");
 
   // Dynamic Options lists loaded from Upstash Redis
-  const [customRegions, setCustomRegions] = useState<string[]>([]);
   const [customFabrics, setCustomFabrics] = useState<string[]>([]);
   const [customWeaves, setCustomWeaves] = useState<string[]>([]);
   const [customOccasions, setCustomOccasions] = useState<string[]>([]);
   const [customColorFamilies, setCustomColorFamilies] = useState<string[]>([]);
 
   // Text inputs for "Other" custom typed selections
-  const [customRegion, setCustomRegion] = useState("");
   const [customFabric, setCustomFabric] = useState("");
   const [customWeave, setCustomWeave] = useState("");
   const [customOccasion, setCustomOccasion] = useState("");
@@ -164,7 +152,6 @@ export default function AddProductPage() {
   const [showCustomColor, setShowCustomColor] = useState(false);
 
   // Dynamic selector options
-  const regionOptions = Array.from(new Set(["Banaras", "Kanchipuram", "Chanderi", "Kalamkari", "Mysore", ...customRegions, "Other"])).filter(Boolean) as string[];
   const colorFamilyOptions = Array.from(new Set([
     "Red", "Blue", "Green", "Gold", "Silver", "Pink", "White", "Black", "Maroon", "Purple", "Cream", "Orange", "Yellow", "Turquoise", 
     ...customColorFamilies
@@ -183,7 +170,6 @@ export default function AddProductPage() {
         const res = await fetch("/api/options");
         if (res.ok) {
           const data = await res.json();
-          setCustomRegions(data.regions || []);
           setCustomFabrics(data.fabrics || []);
           setCustomWeaves(data.weaves || []);
           setCustomOccasions(data.occasions || []);
@@ -236,7 +222,6 @@ export default function AddProductPage() {
     selectedColors.length > 0 && 
     fabric !== "" && 
     occasion !== "" &&
-    (region !== "Other" || customRegion.trim() !== "") &&
     (fabric !== "Other" || customFabric.trim() !== "") &&
     (weave !== "Other" || customWeave.trim() !== "") &&
     (occasion !== "Other" || customOccasion.trim() !== "");
@@ -446,7 +431,6 @@ export default function AddProductPage() {
     e.preventDefault();
     setLoading(true);
 
-    const finalRegion = region === "Other" ? customRegion.trim() : region;
     const finalFabric = fabric === "Other" ? customFabric.trim() : fabric;
     const finalWeave = weave === "Other" ? customWeave.trim() : weave;
     const finalOccasion = occasion === "Other" ? customOccasion.trim() : occasion;
@@ -481,13 +465,6 @@ export default function AddProductPage() {
     try {
       // 1. Save new custom options to Upstash Redis
       const savePromises = [];
-      if (region === "Other") {
-        savePromises.push(fetch("/api/options", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "regions", value: finalRegion })
-        }));
-      }
       if (fabric === "Other") {
         savePromises.push(fetch("/api/options", {
           method: "POST",
@@ -543,7 +520,6 @@ export default function AddProductPage() {
           weave: finalWeave,
           colorFamily: finalColorFamily,
           occasion: finalOccasion,
-          region: finalRegion,
           blouseIncluded,
           blouseLength: blouseIncluded ? blouseLength : "",
           washCare,
@@ -581,7 +557,6 @@ export default function AddProductPage() {
     setCompareAtPrice("25000");
     setCostPrice("9500");
     setStock("5");
-    setRegion("Kanchipuram");
     setSelectedColors(["Red", "Gold"]);
     setFabric("Pure Silk");
     setWeave("Kadhua");
@@ -883,41 +858,7 @@ export default function AddProductPage() {
                       )}
                     </div>
 
-                    {/* Region of Origin Grid Selection */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase text-[#1A1A1A]/70 block">
-                        Region of Origin
-                      </label>
-                      <div className="flex flex-wrap gap-2.5">
-                        {regionOptions.map((rOpt) => {
-                          const isSelected = region === rOpt;
-                          return (
-                            <button
-                              type="button"
-                              key={rOpt}
-                              onClick={() => setRegion(rOpt)}
-                              className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all duration-200 border !cursor-pointer ${
-                                isSelected 
-                                  ? 'bg-[#4A154B] text-[#D4AF37] border-[#4A154B] shadow-md scale-102' 
-                                  : 'bg-white text-soft-black border-soft-black/10 hover:border-soft-black/25'
-                              }`}
-                            >
-                              {rOpt}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {region === "Other" && (
-                        <input
-                          type="text"
-                          required
-                          value={customRegion}
-                          onChange={(e) => setCustomRegion(e.target.value)}
-                          placeholder="Type custom region..."
-                          className="glass-input mt-2.5 focus:border-[#4A154B] text-xs max-w-sm"
-                        />
-                      )}
-                    </div>
+
 
                     {/* Weave Style Grid Selection */}
                     <div className="space-y-2">

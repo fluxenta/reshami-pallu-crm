@@ -19,7 +19,6 @@ interface Product {
   metafields: {
     colour?: string;
     fabric?: string;
-    region?: string;
     [key: string]: any;
   };
 }
@@ -29,7 +28,6 @@ interface FilterValues {
   priceMax?: number;
   colour?: string;
   fabric?: string;
-  region?: string;
 }
 
 export default function ProductsPage() {
@@ -94,14 +92,12 @@ export default function ProductsPage() {
     if (filters.priceMax !== undefined) filtered = filtered.filter(p => p.price <= filters.priceMax!);
     if (filters.colour) filtered = filtered.filter(p => p.metafields?.colour === filters.colour);
     if (filters.fabric) filtered = filtered.filter(p => p.metafields?.fabric === filters.fabric);
-    if (filters.region) filtered = filtered.filter(p => p.metafields?.region === filters.region);
     setDisplayed(filtered);
   }, [products, selectedCollection, filters, collections]);
 
   // Derive dropdown options from product metafields
   const colours = Array.from(new Set(products.map(p => p.metafields?.colour).filter((v): v is string => Boolean(v))));
   const fabrics = Array.from(new Set(products.map(p => p.metafields?.fabric).filter((v): v is string => Boolean(v))));
-  const regions = Array.from(new Set(products.map(p => p.metafields?.region).filter((v): v is string => Boolean(v))));
 
   return (
     <div className="flex min-h-screen bg-[#FAF8F5]">
@@ -112,7 +108,7 @@ export default function ProductsPage() {
         <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-[1360px] mx-auto w-full">
           <section className={styles.inventoryPage} style={{ background: 'transparent', padding: 0 }}>
             <CategoryTabs collections={collections.map(c => c.title)} selected={selectedCollection} onSelect={setSelectedCollection} />
-            <FilterBar onChange={setFilters} availableColours={colours} availableFabrics={fabrics} availableRegions={regions} />
+            <FilterBar onChange={setFilters} availableColours={colours} availableFabrics={fabrics} />
             <div className={styles.grid} role="list">
               {displayed.map(p => (
                 <BentoCard
