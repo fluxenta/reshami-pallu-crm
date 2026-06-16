@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTrackingByAwb as getDelhiveryTracking } from "@/lib/delhivery";
-import { getTrackingByAwb as getShiprocketTracking } from "@/lib/shiprocket";
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,12 +11,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 1. Try Delhivery tracking first
-    let tracking = await getDelhiveryTracking(awb);
-
-    // 2. Fallback to Shiprocket tracking if Delhivery returns null
-    if (!tracking) {
-      tracking = await getShiprocketTracking(awb);
-    }
+    const tracking = await getDelhiveryTracking(awb);
 
     if (!tracking) {
       return NextResponse.json({ error: "Tracking data not found" }, { status: 404 });

@@ -15,7 +15,8 @@ import {
   User,
   ExternalLink,
   RefreshCw,
-  Clock
+  Clock,
+  CheckCircle2
 } from "lucide-react";
 
 interface OrderDetailModalProps {
@@ -37,6 +38,10 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
   const [fulfilling, setFulfilling] = useState(false);
   const [fulfillmentError, setFulfillmentError] = useState<string | null>(null);
   const [manualWeight, setManualWeight] = useState("0.5");
+  const [manualLength, setManualLength] = useState("30");
+  const [manualWidth, setManualWidth] = useState("20");
+  const [manualHeight, setManualHeight] = useState("5");
+
 
   // Parse Razorpay IDs from Shopify Order Note
   const noteText = order.note || "";
@@ -71,15 +76,34 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
   const courierTagFull = order.tags?.find((tag: string) => tag.toLowerCase().startsWith("courier:"));
   const courierNameFromTag = courierTagFull ? courierTagFull.split(":")[1]?.trim() : null;
 
+  const [cachedAwb, setCachedAwb] = useState<string | null>(null);
+  const [labelDownloaded, setLabelDownloaded] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const val = localStorage.getItem(`awb_cache_${order.id}`);
+      if (val) setCachedAwb(val);
+      setLabelDownloaded(localStorage.getItem(`downloaded_label_${order.id}`) === "true");
+    }
+  }, [order.id]);
+
   // Extract Delhivery AWB if available in attributes or note
   const awbAttribute = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "awb" || attr.key.toLowerCase() === "trackingid");
-  let awb = awbAttribute ? awbAttribute.value : null;
+  let awb = awbAttribute ? awbAttribute.value : (cachedAwb || null);
 
   // Secondary fallback: parse AWB from notes or Redis summaries if not found in custom attributes
   if (!awb) {
     const awbMatch = noteText.match(/AWB:\s*([^\s,]+)/i);
     if (awbMatch) awb = awbMatch[1];
   }
+
+  // Extract scheduled pickup details
+  const pickupIdAttribute = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "pickup_id");
+  const pickupDateAttribute = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "pickup_date");
+  const pickupTimeAttribute = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "pickup_time");
+  const pickupId = pickupIdAttribute ? pickupIdAttribute.value : null;
+  const scheduledPickupDate = pickupDateAttribute ? pickupDateAttribute.value : null;
+  const scheduledPickupTime = pickupTimeAttribute ? pickupTimeAttribute.value : null;
 
   // Load Delhivery tracking info if AWB exists
   const fetchTrackingData = async () => {
@@ -109,6 +133,7 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
     setFulfilling(true);
     setFulfillmentError(null);
     try {
+      const productTitles = order.lineItems?.edges?.map((e: any) => e.node.title).join(", ") || "";
       const res = await fetch("/api/orders/fulfill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -123,12 +148,19 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
           province: order.shippingAddress.province,
           zip: order.shippingAddress.zip,
           weight: manualWeight,
+          length: manualLength,
+          width: manualWidth,
+          height: manualHeight,
+          packageDesc: productTitles,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setFulfillmentError(data.error || "Failed to fulfill order.");
       } else {
+        if (data.awb) {
+          localStorage.setItem(`awb_cache_${order.id}`, data.awb);
+        }
         alert(data.message || "Order successfully booked and marked as fulfilled!");
         window.location.reload();
       }
@@ -139,57 +171,6 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
     }
   };
 
-  const handleFulfillOrderShiprocket = async () => {
-    if (!order.shippingAddress) {
-      setFulfillmentError("Cannot fulfill: No shipping address provided.");
-      return;
-    }
-    setFulfilling(true);
-    setFulfillmentError(null);
-    try {
-      const mappedItems = order.lineItems?.edges?.map((e: any) => {
-        const node = e.node;
-        const price = parseFloat(node.originalUnitPriceSet?.presentmentMoney?.amount || "0");
-        return {
-          name: node.title,
-          sku: node.sku || "SAREE",
-          qty: node.quantity || 1,
-          price: price,
-        };
-      }) || [];
-
-      const res = await fetch("/api/orders/fulfill/shiprocket", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId: order.id,
-          orderName: order.name,
-          customerName: `${order.shippingAddress.firstName} ${order.shippingAddress.lastName || ""}`.trim(),
-          customerEmail: order.customer?.email || "",
-          phone: order.shippingAddress.phone || order.customer?.phone || "",
-          address1: order.shippingAddress.address1,
-          address2: order.shippingAddress.address2 || "",
-          city: order.shippingAddress.city,
-          province: order.shippingAddress.province,
-          zip: order.shippingAddress.zip,
-          weight: manualWeight,
-          items: mappedItems,
-          subtotal: parseFloat(order.totalPriceSet?.presentmentMoney?.amount || "0"),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setFulfillmentError(data.error || "Failed to fulfill order with Shiprocket.");
-      } else {
-        alert(data.message || "Order successfully booked with Shiprocket and marked as fulfilled!");
-        window.location.reload();
-      }
-    } catch {
-      setFulfillmentError("Network error. Could not book Shiprocket shipment.");
-    } finally {
-      setFulfilling(false);
-    }
-  };
 
   useEffect(() => {
     fetchTrackingData();
@@ -257,9 +238,12 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/40 backdrop-blur-sm transition-opacity">
-      {/* Sidebar Slider Panel */}
-      <div className="w-full max-w-2xl bg-[#FAF8F5] h-full shadow-2xl flex flex-col relative transform transition-transform duration-300">
+    <div 
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-md transition-opacity p-4 sm:p-6 md:p-8"
+    >
+      {/* Centered Premium Overlay Modal Card */}
+      <div className="w-full max-w-4xl bg-[#FAF8F5] max-h-[90vh] rounded-3xl shadow-2xl flex flex-col relative overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-[#4A154B]/10">
         
         {/* Header */}
         <div className="p-6 border-b border-[#4A154B]/10 bg-white flex justify-between items-center">
@@ -306,7 +290,13 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
               </h3>
               <div className="space-y-2 text-xs">
                 <p className="font-semibold text-sm">
-                  {order.customer?.firstName} {order.customer?.lastName || "Customer"}
+                  {customerProfile && (customerProfile.firstName || customerProfile.lastName)
+                    ? `${customerProfile.firstName || ""} ${customerProfile.lastName || ""}`.trim()
+                    : order.customer && (order.customer.firstName || order.customer.lastName)
+                    ? `${order.customer.firstName || ""} ${order.customer.lastName || ""}`.trim()
+                    : order.shippingAddress && (order.shippingAddress.firstName || order.shippingAddress.lastName)
+                    ? `${order.shippingAddress.firstName || ""} ${order.shippingAddress.lastName || ""}`.trim()
+                    : "Customer"}
                 </p>
                 <p className="flex items-center gap-1.5 text-[#1A1A1A]/70">
                   <Phone size={12} />
@@ -380,17 +370,31 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
               </h3>
               
               {awb && (
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs font-bold text-[#4A154B] bg-[#4A154B]/5 px-2 py-0.5 rounded">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] font-bold text-[#4A154B] bg-[#4A154B]/5 px-1.5 py-0.5 rounded">
                     AWB: {awb}
                   </span>
+                  <a
+                    href={`/api/orders/packing-slip?awb=${awb}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem(`downloaded_label_${order.id}`, "true");
+                        setLabelDownloaded(true);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#4A154B] hover:bg-[#4A154B]/95 px-2.5 py-1.5 rounded-md transition-all no-underline"
+                  >
+                    Download Label
+                  </a>
                   <button 
                     type="button" 
                     onClick={fetchTrackingData}
                     className="p-1 rounded hover:bg-[#4A154B]/5 text-[#4A154B] transition-colors cursor-pointer"
                     title="Refresh timeline"
                   >
-                    <RefreshCw size={14} className={loadingTracking ? "animate-spin" : ""} />
+                    <RefreshCw size={12} className={loadingTracking ? "animate-spin" : ""} />
                   </button>
                 </div>
               )}
@@ -415,74 +419,138 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
             })()}
 
             {awb ? (
-              /* Status Display */
-              loadingTracking ? (
-                <div className="text-xs text-[#1A1A1A]/60 flex items-center gap-2 py-4 justify-center">
-                  <RefreshCw size={14} className="animate-spin text-[#4A154B]" />
-                  Fetching live courier timeline...
-                </div>
-              ) : trackingError ? (
-                <div className="text-xs text-[#1A1A1A]/55 text-center py-4 bg-[#FAF8F5] rounded-xl border border-dashed border-[#1A1A1A]/10">
-                  <Clock size={20} className="mx-auto mb-2 text-[#1A1A1A]/30" />
-                  {trackingError}
-                </div>
-              ) : tracking ? (
-                <div className="space-y-4">
-                  {/* Status Banner */}
-                  <div className="p-3 bg-[#D4AF37]/5 border border-[#D4AF37]/25 rounded-xl flex items-center justify-between text-xs">
-                    <div>
-                      <p className="font-bold text-[#4A154B]">{tracking.status}</p>
-                      {tracking.edd && <p className="text-[10px] text-[#1A1A1A]/65 mt-0.5">Est. Delivery: {tracking.edd}</p>}
-                    </div>
-                    {tracking.deliveredDate && (
-                      <span className="bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">
-                        Delivered
-                      </span>
-                    )}
+              <div className="space-y-5">
+                {/* Status Display */}
+                {loadingTracking ? (
+                  <div className="text-xs text-[#1A1A1A]/60 flex items-center gap-2 py-4 justify-center">
+                    <RefreshCw size={14} className="animate-spin text-[#4A154B]" />
+                    Fetching live courier timeline...
                   </div>
-
-                  {/* Scanned activities timeline */}
-                  <div className="relative ml-2.5 border-l border-[#4A154B]/15 pl-4 space-y-3.5 pt-1">
-                    {tracking.activities?.slice(0, 4).map((activity: any, idx: number) => (
-                      <div key={idx} className="relative text-xs">
-                        <div className={`absolute left-[-21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-[#FAF8F5] ${
-                          idx === 0 ? "bg-[#4A154B]" : "bg-[#1A1A1A]/30"
-                        }`} />
-                        <p className={`font-semibold ${idx === 0 ? "text-[#4A154B]" : "text-[#1A1A1A]/85"}`}>
-                          {activity.activity}
-                        </p>
-                        {activity.location && <p className="text-[10px] text-[#1A1A1A]/60 mt-0.5">{activity.location}</p>}
-                        <p className="text-[9px] text-[#1A1A1A]/45 mt-0.5">{activity.date}</p>
+                ) : trackingError ? (
+                  <div className="text-xs text-[#1A1A1A]/55 text-center py-4 bg-[#FAF8F5] rounded-xl border border-dashed border-[#1A1A1A]/10">
+                    <Clock size={20} className="mx-auto mb-2 text-[#1A1A1A]/30" />
+                    {trackingError}
+                  </div>
+                ) : tracking ? (
+                  <div className="space-y-4">
+                    {/* Status Banner */}
+                    <div className="p-3 bg-[#D4AF37]/5 border border-[#D4AF37]/25 rounded-xl flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-bold text-[#4A154B]">{tracking.status}</p>
+                        {tracking.edd && <p className="text-[10px] text-[#1A1A1A]/65 mt-0.5">Est. Delivery: {tracking.edd}</p>}
                       </div>
-                    ))}
+                      {tracking.deliveredDate && (
+                        <span className="bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">
+                          Delivered
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Scanned activities timeline */}
+                    <div className="relative ml-2.5 border-l border-[#4A154B]/15 pl-4 space-y-3.5 pt-1">
+                      {tracking.activities?.slice(0, 4).map((activity: any, idx: number) => (
+                        <div key={idx} className="relative text-xs">
+                          <div className={`absolute left-[-21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-[#FAF8F5] ${
+                            idx === 0 ? "bg-[#4A154B]" : "bg-[#1A1A1A]/30"
+                          }`} />
+                          <p className={`font-semibold ${idx === 0 ? "text-[#4A154B]" : "text-[#1A1A1A]/85"}`}>
+                            {activity.activity}
+                          </p>
+                          {activity.location && <p className="text-[10px] text-[#1A1A1A]/60 mt-0.5">{activity.location}</p>}
+                          <p className="text-[9px] text-[#1A1A1A]/45 mt-0.5">{activity.date}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                ) : (
+                  <div className="text-xs text-[#1A1A1A]/55 text-center py-4 bg-[#FAF8F5] rounded-xl border border-dashed border-[#1A1A1A]/10">
+                    Awaiting courier manifestation.
+                  </div>
+                )}
+
+                {/* Delhivery Pickup Scheduling Section */}
+                <div className="border-t border-[#4A154B]/10 pt-4 space-y-3">
+                  <h4 className="text-[11px] uppercase font-bold text-[#4A154B] tracking-wider flex items-center gap-1.5">
+                    <Calendar size={12} className="text-[#D4AF37]" />
+                    Delhivery Pickup Scheduling
+                  </h4>
+
+                  {pickupId ? (
+                    <div className="p-3 bg-green-50 text-green-700 rounded-xl border border-green-200 text-xs space-y-1">
+                      <p className="font-bold flex items-center gap-1">
+                        <CheckCircle2 size={14} />
+                        Pickup Successfully Scheduled!
+                      </p>
+                      <p className="text-[10px] text-green-800">
+                        Pickup ID: <strong className="font-bold">{pickupId}</strong>
+                      </p>
+                      <p className="text-[10px] text-green-800">
+                        Date/Slot: <strong>{scheduledPickupDate}</strong> ({scheduledPickupTime === "10:00:00" ? "Morning Slot: 10 AM - 1 PM" : "Afternoon Slot: 2 PM - 5 PM"})
+                      </p>
+                      <div className="mt-2 p-2 bg-amber-50 text-amber-900 rounded-lg border border-amber-200 text-[10px] leading-relaxed">
+                        📌 <strong>Packing Deadline:</strong> Please ensure the shipping label is printed and pasted onto the package before <strong>{scheduledPickupTime === "10:00:00" ? "09:30 AM" : "01:30 PM"} on {scheduledPickupDate}</strong>.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-amber-50/50 text-amber-900/80 rounded-xl border border-amber-200/40 text-[10px] leading-relaxed">
+                      📦 Manifested shipment is queued. You can schedule or manage daily pickup runs for this package from the main dashboard coordinator panel.
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-xs text-[#1A1A1A]/55 text-center py-4 bg-[#FAF8F5] rounded-xl border border-dashed border-[#1A1A1A]/10">
-                  Awaiting courier manifestation.
-                </div>
-              )
+              </div>
             ) : (
               /* Fulfillment Fulfill actions */
               <div className="space-y-4 text-xs">
-                <p className="text-[#1A1A1A]/60">
-                  This order has not been fulfilled yet. Manifest shipment directly with Delhivery or Shiprocket and push fulfillment status to Shopify.
+                <p className="text-[#1A1A1A]/60 text-[11px]">
+                  This order has not been fulfilled yet. Enter dimensions and weight to register the box with Delhivery and fulfill the order on Shopify.
                 </p>
 
-                <div className="flex flex-col gap-1.5 p-3.5 bg-[#FAF8F5] rounded-xl border border-[#4A154B]/5">
-                  <label className="text-[10px] uppercase font-bold text-[#4A154B] tracking-wider">
-                    Package Weight (kg)
-                  </label>
-                  <div className="flex items-center gap-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2 flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-bold text-[#4A154B] tracking-wider">
+                      Package Weight (kg)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={manualWeight}
+                        onChange={(e) => setManualWeight(e.target.value)}
+                        className="w-24 h-9 rounded-lg border border-[#4A154B]/10 px-2.5 bg-white text-xs outline-none focus:border-[#4A154B]"
+                      />
+                      <span className="text-[11px] text-[#1A1A1A]/50">kg (e.g. 0.5 for regular saree box)</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-bold text-[#4A154B] tracking-wider">Length (cm)</label>
                     <input
                       type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={manualWeight}
-                      onChange={(e) => setManualWeight(e.target.value)}
-                      className="w-24 h-9 rounded-lg border border-[#4A154B]/10 px-2.5 bg-white text-xs outline-none focus:border-[#4A154B]"
+                      value={manualLength}
+                      onChange={(e) => setManualLength(e.target.value)}
+                      className="h-9 rounded-lg border border-[#4A154B]/10 px-2.5 bg-white text-xs outline-none focus:border-[#4A154B]"
                     />
-                    <span className="text-xs text-[#1A1A1A]/50">kg (e.g. 0.5 for light boxes, 1.2 for bridal sarees)</span>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-bold text-[#4A154B] tracking-wider">Width (cm)</label>
+                    <input
+                      type="number"
+                      value={manualWidth}
+                      onChange={(e) => setManualWidth(e.target.value)}
+                      className="h-9 rounded-lg border border-[#4A154B]/10 px-2.5 bg-white text-xs outline-none focus:border-[#4A154B]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-bold text-[#4A154B] tracking-wider">Height (cm)</label>
+                    <input
+                      type="number"
+                      value={manualHeight}
+                      onChange={(e) => setManualHeight(e.target.value)}
+                      className="h-9 rounded-lg border border-[#4A154B]/10 px-2.5 bg-white text-xs outline-none focus:border-[#4A154B]"
+                    />
                   </div>
                 </div>
 
@@ -492,36 +560,15 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                   </div>
                 )}
                 
-                {(() => {
-                  const courierTag = order.tags?.find((tag: string) => tag.toLowerCase().startsWith("courier:"));
-                  const preferredCourier = courierTag ? courierTag.split(":")[1]?.trim()?.toLowerCase() : "delhivery";
-
-                  if (preferredCourier === "shiprocket") {
-                    return (
-                      <button
-                        type="button"
-                        disabled={fulfilling || !order.shippingAddress}
-                        onClick={handleFulfillOrderShiprocket}
-                        className="w-full inline-flex items-center justify-center gap-2 bg-rose-700 hover:bg-rose-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer text-xs uppercase tracking-wider"
-                      >
-                        <Package size={14} />
-                        {fulfilling ? "Processing with Shiprocket..." : "Fulfill & Manifest with Shiprocket"}
-                      </button>
-                    );
-                  } else {
-                    return (
-                      <button
-                        type="button"
-                        disabled={fulfilling || !order.shippingAddress}
-                        onClick={handleFulfillOrder}
-                        className="w-full inline-flex items-center justify-center gap-2 bg-[#4A154B] hover:bg-[#4A154B]/90 text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer text-xs uppercase tracking-wider"
-                      >
-                        <Truck size={14} />
-                        {fulfilling ? "Processing with Delhivery..." : "Fulfill & Manifest with Delhivery"}
-                      </button>
-                    );
-                  }
-                })()}
+                <button
+                  type="button"
+                  disabled={fulfilling || !order.shippingAddress}
+                  onClick={handleFulfillOrder}
+                  className="w-full inline-flex items-center justify-center gap-2 bg-[#4A154B] hover:bg-[#4A154B]/90 text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer text-xs uppercase tracking-wider"
+                >
+                  <Truck size={14} />
+                  {fulfilling ? "Processing with Delhivery..." : "Fulfill & Manifest with Delhivery"}
+                </button>
               </div>
             )}
           </div>

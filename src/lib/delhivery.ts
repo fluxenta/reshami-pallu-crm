@@ -84,6 +84,16 @@ export interface BookShipmentInput {
   };
   weightKg?: number;
   packageDesc?: string;
+  length?: number;
+  width?: number;
+  height?: number;
+  products?: Array<{
+    name: string;
+    qty: number;
+    price: number;
+    sku: string;
+  }>;
+  totalPrice?: number;
 }
 
 export interface BookingResult {
@@ -102,7 +112,18 @@ export async function bookShipmentWithDelhivery(
     return { success: false, error: "Delhivery API Token is not configured." };
   }
 
-  const { orderId, customerName, address, weightKg = 0.5, packageDesc } = input;
+  const { 
+    orderId, 
+    customerName, 
+    address, 
+    weightKg = 0.5, 
+    packageDesc, 
+    length = 0, 
+    width = 0, 
+    height = 0,
+    products = [],
+    totalPrice = 0
+  } = input;
 
   try {
     const shipmentData = {
@@ -119,8 +140,14 @@ export async function bookShipmentWithDelhivery(
           payment_mode: "Pre-paid",
           package_desc: packageDesc || "Premium Indian Saree & Ethnic Wear",
           package_type: "box",
-          weight: weightKg,
+          weight: Math.round(weightKg * 1000), // weight in grams
           cod_amount: 0,
+          shipment_length: length > 0 ? length : undefined,
+          shipment_width: width > 0 ? width : undefined,
+          shipment_height: height > 0 ? height : undefined,
+          client: "6d2d07-RESHMIPALLU-do",
+          products: products.length > 0 ? products : undefined,
+          declared_value: totalPrice > 0 ? totalPrice : undefined,
         },
       ],
       pickup_location: {
@@ -190,5 +217,124 @@ export async function bookShipmentWithDelhivery(
       error: err.message || "Shipment booking failed.",
     };
   }
+}
+
+export interface PickupInput {
+  pickupDate: string;
+  pickupTime: string;
+  expectedCount?: number;
+}
+
+export interface PickupResult {
+  success: boolean;
+  pickupId?: string;
+  pickupDate?: string;
+  pickupTime?: string;
+  status?: string;
+  error?: string;
+}
+
+export async function schedulePickupWithDelhivery(
+  input: PickupInput
+): Promise<PickupResult> {
+  const token = process.env.DELHIVERY_API_TOKEN || "";
+  const pickupLocation = process.env.DELHIVERY_PICKUP_LOCATION || "RESHMI PALLU";
+  if (!token) {
+    return { success: false, error: "Delhivery API Token is not configured." };
+  }
+
+  const { pickupDate, pickupTime, expectedCount = 1 } = input;
+
+  try {
+    const payload = {
+      pickup_date: pickupDate,
+      pickup_time: pickupTime,
+      pickup_location: pickupLocation,
+      expected_package_count: expectedCount,
+    };
+
+    const baseUrl = getBaseUrl();
+    const res = await fetch(`${baseUrl}/fm/request/new/`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Token ${token}`,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error("[Delhivery Pickup Request Failed]:", res.status, text);
+      throw new Error(`Delhivery API returned status ${res.status}: ${text}`);
+    }
+
+    const response = await res.json() as any;
+
+    if (response?.error || response?.status === "Fail") {
+      const errMsg = typeof response.error === "object"
+        ? JSON.stringify(response.error)
+        : (response.error || response.rmk || "Failed to schedule pickup.");
+      throw new Error(errMsg);
+    }
+
+    return {
+      success: true,
+      pickupId: response?.pickup_id || response?.id || "N/A",
+      pickupDate: response?.pickup_date || pickupDate,
+      pickupTime: response?.pickup_time || pickupTime,
+      status: response?.status || "Success",
+    };
+  } catch (err: any) {
+    console.error("Delhivery pickup scheduling failed:", err);
+    return {
+      success: false,
+      error: err.message || "Pickup scheduling failed.",
+    };
+  }
+}
+
+export async function getDelhiveryCharges(
+  pincode: string,
+  weightKg: number = 0.5,
+  length?: number,
+  width?: number,
+  height?: number
+): Promise<number> {
+  const token = process.env.DELHIVERY_API_TOKEN || "";
+  const pickupPincode = process.env.DELHIVERY_PICKUP_PINCODE || "560094";
+  if (!token) return 0;
+
+  try {
+    const weightGrams = Math.round(weightKg * 1000);
+    const baseUrl = getBaseUrl();
+    const params = new URLSearchParams({
+      md: "S",
+      cgm: String(weightGrams),
+      o_pin: String(pickupPincode),
+      d_pin: pincode,
+      ss: "Delivered",
+    });
+
+    const res = await fetch(`${baseUrl}/api/kinko/v1/invoice/charges/.json?${params.toString()}`, {
+      headers: {
+        Authorization: `Token ${token}`,
+      },
+    });
+
+    if (res.ok) {
+      const data = await res.json() as any;
+      const chargeObj = Array.isArray(data) ? data[0] : data;
+      if (chargeObj && typeof chargeObj.total_amount === "number") {
+        return Math.round(chargeObj.total_amount);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch Delhivery charges in CRM:", err);
+  }
+  return 0;
 }
 

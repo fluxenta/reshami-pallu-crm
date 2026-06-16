@@ -1186,7 +1186,13 @@ export const shopifyOrder = {
     }
   },
 
-  async fulfillOrder(orderId: string, trackingNumber: string, trackingCarrier: string): Promise<boolean> {
+  async fulfillOrder(
+    orderId: string,
+    trackingNumber: string,
+    trackingCarrier: string,
+    actualCourierCost?: number,
+    existingPickup?: { id: string; date: string; time: string }
+  ): Promise<boolean> {
     // 1. Get the fulfillment order ID for this order
     const foQuery = `
       query getFulfillmentOrder($id: ID!) {
@@ -1196,12 +1202,11 @@ export const shopifyOrder = {
               node {
                 id
                 status
-                supportedActions
                 lineItems(first: 100) {
                   edges {
                     node {
                       id
-                      quantity
+                      totalQuantity
                     }
                   }
                 }
@@ -1244,7 +1249,7 @@ export const shopifyOrder = {
 
     const lineItems = activeFulfillmentOrder.lineItems.edges.map((e: any) => ({
       id: e.node.id,
-      quantity: e.node.quantity
+      quantity: e.node.totalQuantity
     }));
 
     const variables = {
@@ -1279,7 +1284,7 @@ export const shopifyOrder = {
 
     // 3. Save the AWB in Order tags/custom attributes so the storefront can easily display it too
     const updateOrderMutation = `
-      mutation updateOrderTags($id: ID!, $input: OrderInput!) {
+      mutation updateOrderTags($input: OrderInput!) {
         orderUpdate(input: $input) {
           order {
             id
@@ -1297,6 +1302,7 @@ export const shopifyOrder = {
       query getOrderTags($id: ID!) {
         order(id: $id) {
           tags
+          note
           customAttributes {
             key
             value
@@ -1304,7 +1310,7 @@ export const shopifyOrder = {
         }
       }
     `;
-    const tagRes = await shopifyAdminFetch<{ order: { tags: string[], customAttributes: Array<{ key: string, value: string }> } }>({
+    const tagRes = await shopifyAdminFetch<{ order: { tags: string[], note: string, customAttributes: Array<{ key: string, value: string }> } }>({
       query: currentTagsQuery,
       variables: { id: orderId }
     });
@@ -1313,24 +1319,58 @@ export const shopifyOrder = {
     if (!tags.includes("Delhivery")) tags.push("Delhivery");
     if (!tags.includes(`AWB-${trackingNumber}`)) tags.push(`AWB-${trackingNumber}`);
 
-    const newAttributes = [...(tagRes.order?.customAttributes || [])];
+    if (existingPickup) {
+      if (!tags.includes("Pickup Scheduled")) tags.push("Pickup Scheduled");
+    }
+
+    const newAttributes = (tagRes.order?.customAttributes || []).map(attr => ({
+      key: attr.key,
+      value: String(attr.value ?? "")
+    }));
     if (!newAttributes.some(attr => attr.key.toLowerCase() === "awb")) {
       newAttributes.push({ key: "awb", value: trackingNumber });
     }
 
-    // Prepare note with AWB information
-    let existingNote = tagRes.order?.customAttributes?.find(attr => attr.key.toLowerCase() === "note")?.value || "";
-    let newNote = `AWB: ${trackingNumber}\n${existingNote}`;
+    if (existingPickup) {
+      if (!newAttributes.some(attr => attr.key.toLowerCase() === "pickup_id")) {
+        newAttributes.push({ key: "pickup_id", value: String(existingPickup.id) });
+      }
+      if (!newAttributes.some(attr => attr.key.toLowerCase() === "pickup_date")) {
+        newAttributes.push({ key: "pickup_date", value: String(existingPickup.date) });
+      }
+      if (!newAttributes.some(attr => attr.key.toLowerCase() === "pickup_time")) {
+        newAttributes.push({ key: "pickup_time", value: String(existingPickup.time) });
+      }
+    }
+
+    // Prepare note with AWB information & update Courier Cost if calculated during manifestation
+    let existingNote = tagRes.order?.note || "";
+    let finalNote = existingNote;
+
+    if (actualCourierCost !== undefined && actualCourierCost > 0) {
+      if (/Courier Cost:\s*₹[\d.]+/i.test(finalNote)) {
+        finalNote = finalNote.replace(/Courier Cost:\s*₹[\d.]+/i, `Courier Cost: ₹${actualCourierCost}`);
+      } else {
+        if (finalNote.trim()) {
+          finalNote = `${finalNote}, Courier Cost: ₹${actualCourierCost}`;
+        } else {
+          finalNote = `Courier Cost: ₹${actualCourierCost}`;
+        }
+      }
+    }
+
+    if (!finalNote.includes(`AWB: ${trackingNumber}`)) {
+      finalNote = `AWB: ${trackingNumber}\n${finalNote}`;
+    }
 
     await shopifyAdminFetch({
       query: updateOrderMutation,
       variables: {
-        id: orderId,
         input: {
           id: orderId,
           tags,
           customAttributes: newAttributes,
-          note: newNote
+          note: finalNote
         }
       }
     });
