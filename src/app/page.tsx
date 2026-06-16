@@ -160,7 +160,15 @@ export default async function DashboardPage() {
             </div>
 
             {/* Premium quick shortcut grids designed for non-technical users */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 pt-6 border-t border-white/10">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8 pt-6 border-t border-white/10">
+              <Link href="/orders" className="group flex flex-col p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-[#D4AF37]/50 hover:bg-white/10 transition-all duration-300 no-underline text-white">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-300 mb-3 group-hover:scale-110 transition-transform">
+                  <FileText size={20} />
+                </div>
+                <span className="text-xs font-bold tracking-wide">Manage Orders</span>
+                <span className="text-[10px] text-white/60 mt-1">Fulfill orders & schedule logistics runs</span>
+              </Link>
+
               <Link href="/products/add" className="group flex flex-col p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-[#D4AF37]/50 hover:bg-white/10 transition-all duration-300 no-underline text-white">
                 <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37] mb-3 group-hover:scale-110 transition-transform">
                   <PlusCircle size={20} />
