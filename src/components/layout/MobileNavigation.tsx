@@ -62,7 +62,7 @@ export default function MobileNavigation() {
           onClick={() => setIsOpen(false)}
         >
           <aside 
-            className="w-72 max-w-[80vw] h-full bg-[#FAF8F5] shadow-2xl flex flex-col p-6 animate-in slide-in-from-right duration-200"
+            className="w-72 max-w-[80vw] h-full bg-[#FAF8F5] shadow-2xl flex flex-col p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center border-b border-[#4A154B]/5 pb-4 mb-6">
