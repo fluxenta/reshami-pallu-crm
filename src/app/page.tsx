@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import { shopifySaree } from "@/lib/shopify";
+import { shopifySaree, shopifyOrder } from "@/lib/shopify";
 import { sareeDb } from "@/lib/db";
 import { 
   ShoppingBag, 
@@ -34,7 +34,9 @@ export default async function DashboardPage() {
   let deadStock = 0;
   const categoryCounts: Record<string, number> = {};
   let topCategories: [string, number][] = [];
-  
+  let unfulfilledOrdersCount = 0;
+  let manifestedOrdersCount = 0;
+
   try {
     // 1. Fetch products from Shopify
     const listRes = await shopifySaree.list(150);
@@ -43,6 +45,29 @@ export default async function DashboardPage() {
     // 2. Fetch corresponding metadata from Redis
     const skus = products.map(p => p.sku).filter(Boolean);
     const metaMap = await sareeDb.mget(skus);
+
+    // Fetch orders to calculate logistics pipeline stats
+    try {
+      const orders = await shopifyOrder.list(100);
+      orders.forEach((o) => {
+        const awbAttribute = o.customAttributes?.find(
+          (attr: any) => attr.key.toLowerCase() === "awb" || attr.key.toLowerCase() === "trackingid"
+        );
+        let awb = awbAttribute ? awbAttribute.value : null;
+        if (!awb && o.note) {
+          const awbMatch = o.note.match(/AWB:\s*([^\s,]+)/i);
+          if (awbMatch) awb = awbMatch[1];
+        }
+
+        if (o.displayFulfillmentStatus !== "FULFILLED" && !awb) {
+          unfulfilledOrdersCount++;
+        } else if (awb) {
+          manifestedOrdersCount++;
+        }
+      });
+    } catch (err) {
+      console.error("Failed to fetch orders in dashboard:", err);
+    }
 
     const oneMonthAgo = new Date();
     oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
@@ -137,7 +162,7 @@ export default async function DashboardPage() {
         <Header title="Saree Curation Center" />
 
         {/* Dashboard Frame */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-[1360px] mx-auto w-full space-y-6 sm:space-y-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-8 pb-24 max-w-[1360px] mx-auto w-full space-y-6 sm:space-y-8">
           
           {/* Re-designed Premium Welcome & Quick Actions Bar */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#4A154B] via-[#6B3B6C] to-[#4A154B] border border-[#D4AF37]/20 p-6 sm:p-8 shadow-xl text-white">
@@ -264,11 +289,32 @@ export default async function DashboardPage() {
             </div>
           </div>
 
+          {/* Shipment & Logistics Operations Pipeline Card */}
+          <div className="ui-card p-5 border border-[#4A154B]/10 space-y-4">
+            <h4 className="font-display font-bold text-base text-[#4A154B] flex items-center gap-2">
+              <ShoppingBag size={18} className="text-[#D4AF37]" />
+              Shipping & Operations Pipeline
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              <Link href="/orders" className="flex flex-col p-4 rounded-2xl bg-amber-50 hover:bg-amber-100/60 border border-amber-200 text-amber-900 transition-all no-underline font-semibold cursor-pointer">
+                <span className="text-[10px] uppercase font-bold text-amber-700/80 tracking-wider">Awaiting Dispatch</span>
+                <span className="text-2xl font-display font-bold mt-1">{unfulfilledOrdersCount} orders</span>
+                <span className="text-[10px] text-amber-800/75 mt-1 font-semibold">Needs package waybill & pickup setup &rarr;</span>
+              </Link>
+              
+              <Link href="/orders" className="flex flex-col p-4 rounded-2xl bg-green-50 hover:bg-green-100/60 border border-green-200 text-green-900 transition-all no-underline font-semibold cursor-pointer">
+                <span className="text-[10px] uppercase font-bold text-green-700/80 tracking-wider">Dispatched / Manifested</span>
+                <span className="text-2xl font-display font-bold mt-1">{manifestedOrdersCount} shipments</span>
+                <span className="text-[10px] text-green-800/75 mt-1 font-semibold">Running live tracking with couriers &rarr;</span>
+              </Link>
+            </div>
+          </div>
+
           {/* Redesigned Metric Cards with conversational tooltip guides */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="flex lg:grid lg:grid-cols-4 overflow-x-auto lg:overflow-x-visible gap-6 pb-4 lg:pb-0 snap-x scrollbar-thin">
             
             {/* Unique Saree Items Card */}
-            <div className="ui-card ui-card-hover p-6 flex items-center gap-4 relative overflow-hidden">
+            <div className="ui-card ui-card-hover p-6 flex items-center gap-4 relative overflow-hidden shrink-0 snap-start w-72 lg:w-auto">
               <div className="w-12 h-12 rounded-xl bg-[#4A154B]/5 border border-[#4A154B]/10 flex items-center justify-center text-[#4A154B]">
                 <ShoppingBag size={20} />
               </div>
@@ -292,7 +338,7 @@ export default async function DashboardPage() {
             </div>
 
             {/* Total In-Stock Items Card */}
-            <div className="ui-card ui-card-hover p-6 flex items-center gap-4 relative overflow-hidden">
+            <div className="ui-card ui-card-hover p-6 flex items-center gap-4 relative overflow-hidden shrink-0 snap-start w-72 lg:w-auto">
               <div className="w-12 h-12 rounded-xl bg-[#D4AF37]/5 border border-[#D4AF37]/10 flex items-center justify-center text-[#D4AF37]">
                 <TrendingUp size={20} />
               </div>
@@ -315,7 +361,7 @@ export default async function DashboardPage() {
             </div>
 
             {/* Retail Catalog Value Card */}
-            <div className="ui-card ui-card-hover p-6 flex items-center gap-4 relative overflow-hidden">
+            <div className="ui-card ui-card-hover p-6 flex items-center gap-4 relative overflow-hidden shrink-0 snap-start w-72 lg:w-auto">
               <div className="w-12 h-12 rounded-xl bg-green-50 border border-green-100 flex items-center justify-center text-green-700">
                 <DollarSign size={20} />
               </div>
@@ -340,7 +386,7 @@ export default async function DashboardPage() {
             </div>
 
             {/* Overall Profit Margin Health Card */}
-            <div className="ui-card ui-card-hover p-6 flex items-center gap-4 relative overflow-hidden">
+            <div className="ui-card ui-card-hover p-6 flex items-center gap-4 relative overflow-hidden shrink-0 snap-start w-72 lg:w-auto">
               <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-700">
                 <TrendingUp size={20} />
               </div>
@@ -388,47 +434,77 @@ export default async function DashboardPage() {
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-[#4A154B]/10 text-[10px] uppercase tracking-wider text-[#1A1A1A]/50 font-bold">
-                        <th className="pb-3">Saree Title</th>
-                        <th className="pb-3">SKU</th>
-                        <th className="pb-3 text-center">Current Stock</th>
-                        <th className="pb-3 text-right">Retail Price</th>
-                        <th className="pb-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#4A154B]/5 text-xs text-[#1A1A1A]/80">
-                      {lowStockProducts.slice(0, 5).map((p) => (
-                        <tr key={p.id} className="hover:bg-[#4A154B]/5 transition-colors duration-200">
-                          <td className="py-3 font-semibold text-[#4A154B] max-w-[200px] truncate">
-                            {p.title}
-                          </td>
-                          <td className="py-3 font-mono text-[11px] text-[#1A1A1A]/60">
-                            {p.sku}
-                          </td>
-                          <td className="py-3 text-center">
-                            <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                              p.stock === 0 
-                                ? 'bg-red-50 text-red-600 border border-red-100' 
-                                : 'bg-[#D4AF37]/5 text-[#4A154B] border border-[#D4AF37]/20'
-                            }`}>
-                              {p.stock === 0 ? "Out of Stock" : `${p.stock} left`}
-                            </span>
-                          </td>
-                          <td className="py-3 text-right font-medium">
-                            ₹{(p.price || 0).toLocaleString('en-IN')}
-                          </td>
-                          <td className="py-3 text-right">
-                            <Link href={`/products/edit/${p.id.split('/').pop()}`} className="no-underline text-xs bg-[#4A154B]/5 text-[#4A154B] hover:bg-[#4A154B] hover:text-white px-2.5 py-1 rounded font-semibold transition-colors duration-200">
-                              Edit Stock
-                            </Link>
-                          </td>
+                <div className="w-full">
+                  {/* Desktop Table View */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-[#4A154B]/10 text-[10px] uppercase tracking-wider text-[#1A1A1A]/50 font-bold">
+                          <th className="pb-3">Saree Title</th>
+                          <th className="pb-3">SKU</th>
+                          <th className="pb-3 text-center">Current Stock</th>
+                          <th className="pb-3 text-right">Retail Price</th>
+                          <th className="pb-3 text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-[#4A154B]/5 text-xs text-[#1A1A1A]/80">
+                        {lowStockProducts.slice(0, 5).map((p) => (
+                          <tr key={p.id} className="hover:bg-[#4A154B]/5 transition-colors duration-200">
+                            <td className="py-3 font-semibold text-[#4A154B] max-w-[200px] truncate">
+                              {p.title}
+                            </td>
+                            <td className="py-3 font-mono text-[11px] text-[#1A1A1A]/60">
+                              {p.sku}
+                            </td>
+                            <td className="py-3 text-center">
+                              <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                p.stock === 0 
+                                  ? 'bg-red-50 text-red-600 border border-red-100' 
+                                  : 'bg-[#D4AF37]/5 text-[#4A154B] border border-[#D4AF37]/20'
+                              }`}>
+                                {p.stock === 0 ? "Out of Stock" : `${p.stock} left`}
+                              </span>
+                            </td>
+                            <td className="py-3 text-right font-medium">
+                              ₹{(p.price || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-3 text-right">
+                              <Link href={`/products/edit/${p.id.split('/').pop()}`} className="no-underline text-xs bg-[#4A154B]/5 text-[#4A154B] hover:bg-[#4A154B] hover:text-white px-2.5 py-1 rounded font-semibold transition-colors duration-200">
+                                Edit Stock
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card-Based View */}
+                  <div className="flex flex-col space-y-3 lg:hidden">
+                    {lowStockProducts.slice(0, 5).map((p) => (
+                      <div key={p.id} className="p-4 rounded-xl border border-[#4A154B]/5 bg-[#FAF8F5]/30 flex flex-col gap-2">
+                        <div className="flex justify-between items-start">
+                          <span className="font-semibold text-xs text-[#4A154B] line-clamp-1 flex-1">{p.title}</span>
+                          <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${
+                            p.stock === 0 
+                              ? 'bg-red-50 text-red-600 border border-red-100' 
+                              : 'bg-[#D4AF37]/5 text-[#4A154B] border border-[#D4AF37]/20'
+                          }`}>
+                            {p.stock === 0 ? "Out of Stock" : `${p.stock} left`}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px] text-[#1A1A1A]/60">
+                          <span>SKU: <span className="font-mono">{p.sku}</span></span>
+                          <span className="font-medium text-[#1A1A1A]">₹{(p.price || 0).toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="pt-2 border-t border-[#4A154B]/5 flex justify-end">
+                          <Link href={`/products/edit/${p.id.split('/').pop()}`} className="no-underline text-xs bg-[#4A154B]/5 text-[#4A154B] hover:bg-[#4A154B] hover:text-white px-3 py-1.5 rounded-lg font-bold transition-colors duration-200">
+                            Edit Stock
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -573,51 +649,82 @@ export default async function DashboardPage() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-[#4A154B]/10 text-[10px] uppercase tracking-wider text-[#1A1A1A]/50 font-bold">
-                      <th className="pb-3">Saree Title</th>
-                      <th className="pb-3">SKU</th>
-                      <th className="pb-3 text-center">Age (Days)</th>
-                      <th className="pb-3 text-center">Stock Level</th>
-                      <th className="pb-3 text-right">Retail Value</th>
-                      <th className="pb-3 text-right">Cost Price</th>
-                      <th className="pb-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#4A154B]/5 text-xs text-[#1A1A1A]/80">
-                    {deadStockProducts.map((p) => (
-                      <tr key={p.id} className="hover:bg-red-50/30 transition-colors duration-200">
-                        <td className="py-3 font-semibold text-[#4A154B] max-w-[250px] truncate">
-                          {p.title}
-                        </td>
-                        <td className="py-3 font-mono text-[11px] text-[#1A1A1A]/60">
-                          {p.sku}
-                        </td>
-                        <td className="py-3 text-center font-bold text-red-600">
-                          {p.ageInDays} days
-                        </td>
-                        <td className="py-3 text-center">
-                          <span className="bg-[#4A154B]/5 text-[#4A154B] px-2 py-0.5 rounded font-medium">
-                            {p.stock} units
-                          </span>
-                        </td>
-                        <td className="py-3 text-right font-medium">
-                          ₹{(p.price || 0).toLocaleString('en-IN')}
-                        </td>
-                        <td className="py-3 text-right text-[#1A1A1A]/60">
-                          ₹{(p.costPrice || 0).toLocaleString('en-IN')}
-                        </td>
-                        <td className="py-3 text-right">
-                          <Link href="/discounts" className="no-underline text-xs bg-red-50 text-red-700 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded font-semibold transition-colors duration-200 inline-block">
-                            Run Campaign
-                          </Link>
-                        </td>
+              <div className="w-full">
+                {/* Desktop Table View */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#4A154B]/10 text-[10px] uppercase tracking-wider text-[#1A1A1A]/50 font-bold">
+                        <th className="pb-3">Saree Title</th>
+                        <th className="pb-3">SKU</th>
+                        <th className="pb-3 text-center">Age (Days)</th>
+                        <th className="pb-3 text-center">Stock Level</th>
+                        <th className="pb-3 text-right">Retail Value</th>
+                        <th className="pb-3 text-right">Cost Price</th>
+                        <th className="pb-3 text-right">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-[#4A154B]/5 text-xs text-[#1A1A1A]/80">
+                      {deadStockProducts.map((p) => (
+                        <tr key={p.id} className="hover:bg-red-50/30 transition-colors duration-200">
+                          <td className="py-3 font-semibold text-[#4A154B] max-w-[250px] truncate">
+                            {p.title}
+                          </td>
+                          <td className="py-3 font-mono text-[11px] text-[#1A1A1A]/60">
+                            {p.sku}
+                          </td>
+                          <td className="py-3 text-center font-bold text-red-600">
+                            {p.ageInDays} days
+                          </td>
+                          <td className="py-3 text-center">
+                            <span className="bg-[#4A154B]/5 text-[#4A154B] px-2 py-0.5 rounded font-medium">
+                              {p.stock} units
+                            </span>
+                          </td>
+                          <td className="py-3 text-right font-medium">
+                            ₹{(p.price || 0).toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-3 text-right text-[#1A1A1A]/60">
+                            ₹{(p.costPrice || 0).toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-3 text-right">
+                            <Link href="/discounts" className="no-underline text-xs bg-red-50 text-red-700 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded font-semibold transition-colors duration-200 inline-block">
+                              Run Campaign
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="flex flex-col space-y-3 lg:hidden">
+                  {deadStockProducts.map((p) => (
+                    <div key={p.id} className="p-4 rounded-xl border border-red-100 bg-red-50/10 flex flex-col gap-2">
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="font-semibold text-xs text-[#4A154B] line-clamp-1 flex-1">{p.title}</span>
+                        <span className="text-[10px] font-bold text-red-600 shrink-0">{p.ageInDays} days old</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px] text-[#1A1A1A]/60">
+                        <span>SKU: <span className="font-mono">{p.sku}</span></span>
+                        <span>Stock: <span className="font-semibold text-[#4A154B]">{p.stock} units</span></span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px] border-t border-[#4A154B]/5 pt-2 mt-1">
+                        <div>
+                          <span className="text-[#1A1A1A]/50">Cost: </span>
+                          <span className="font-medium text-[#1A1A1A]">₹{(p.costPrice || 0).toLocaleString('en-IN')}</span>
+                          <span className="mx-1.5 text-[#1A1A1A]/20">|</span>
+                          <span className="text-[#1A1A1A]/50">Retail: </span>
+                          <span className="font-bold text-[#4A154B]">₹{(p.price || 0).toLocaleString('en-IN')}</span>
+                        </div>
+                        <Link href="/discounts" className="no-underline text-xs bg-red-50 text-red-700 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg font-bold transition-colors duration-200">
+                          Run Campaign
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
