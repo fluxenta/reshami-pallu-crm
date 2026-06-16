@@ -6,7 +6,6 @@ import {
   Eye, 
   Calendar, 
   MapPin, 
-  TrendingUp, 
   CheckCircle2, 
   Clock, 
   Package,
@@ -24,17 +23,20 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
-  // Daily Pickup states
+  // Daily Pickup slots state
   const [pickupDate, setPickupDate] = useState("");
   const [pickupTime, setPickupTime] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [pickupError, setPickupError] = useState<string | null>(null);
   const [pickupSuccess, setPickupSuccess] = useState<string | null>(null);
   const [showScheduler, setShowScheduler] = useState(false);
-  const [mappingOrderId, setMappingOrderId] = useState<string | null>(null);
 
   const [availableDays, setAvailableDays] = useState<Array<{ date: string, label: string, slots: Array<{ value: string, label: string }> }>>([]);
   const [loadingSlots, setLoadingSlots] = useState(true);
+
+  // Bulk Processing States
+  const [selectedUnfulfilled, setSelectedUnfulfilled] = useState<Record<string, boolean>>({});
+  const [orderDimensions, setOrderDimensions] = useState<Record<string, { weightGrams: string, length: string, width: string, height: string }>>({});
 
   useEffect(() => {
     async function loadSlots() {
@@ -62,49 +64,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
   const selectedDay = availableDays.find(d => d.date === pickupDate);
   const currentSlots = selectedDay ? selectedDay.slots : [];
 
-  // Compute order details locally to display profit margins in the main table list
-  const getOrderNetMargin = (order: any) => {
-    let totalOrderCost = 0;
-    order.lineItems?.edges?.forEach((e: any) => {
-      const node = e.node;
-      const sku = node.sku || "";
-      const qty = node.quantity || 1;
-      const meta = metaMap[sku];
-      totalOrderCost += (meta?.costPrice || 0) * qty;
-    });
-
-    const totalRetail = parseFloat(order.totalPriceSet?.presentmentMoney?.amount || "0");
-    const profit = totalRetail - totalOrderCost;
-    const marginPercent = totalRetail > 0 ? (profit / totalRetail) * 100 : 0;
-    return { totalRetail, totalOrderCost, profit, marginPercent };
-  };
-
-  // Filter orders by search input (matching order name, customer name, phone, or tags)
-  const filteredOrders = initialOrders.filter((order) => {
-    const query = searchQuery.toLowerCase().trim();
-    if (!query) return true;
-
-    const orderName = String(order.name || "").toLowerCase();
-    const customerName = `${order.customer?.firstName || ""} ${order.customer?.lastName || ""}`.toLowerCase();
-    const shippingName = `${order.shippingAddress?.firstName || ""} ${order.shippingAddress?.lastName || ""}`.toLowerCase();
-    const phone = String(order.customer?.phone || order.shippingAddress?.phone || "").toLowerCase();
-    const tags = order.tags?.join(" ").toLowerCase() || "";
-
-    return (
-      orderName.includes(query) ||
-      customerName.includes(query) ||
-      shippingName.includes(query) ||
-      phone.includes(query) ||
-      tags.includes(query)
-    );
-  });
-
-  const getMarginColor = (margin: number) => {
-    if (margin >= 40) return "text-green-600 bg-green-50 border-green-200";
-    if (margin >= 20) return "text-yellow-600 bg-yellow-50 border-yellow-200";
-    return "text-red-600 bg-red-50 border-red-200";
-  };
-
+  // Compute helper methods for orders
   const getOrderAwb = (order: any) => {
     const awbAttribute = order.customAttributes?.find(
       (attr: any) => attr.key.toLowerCase() === "awb" || attr.key.toLowerCase() === "trackingid"
@@ -138,7 +98,28 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
     return null;
   };
 
-  // 1. Calculate manifested shipments awaiting pickup
+  const getOrderNetMargin = (order: any) => {
+    let totalOrderCost = 0;
+    order.lineItems?.edges?.forEach((e: any) => {
+      const node = e.node;
+      const sku = node.sku || "";
+      const qty = node.quantity || 1;
+      const meta = metaMap[sku];
+      totalOrderCost += (meta?.costPrice || 0) * qty;
+    });
+
+    const totalRetail = parseFloat(order.totalPriceSet?.presentmentMoney?.amount || "0");
+    const profit = totalRetail - totalOrderCost;
+    const marginPercent = totalRetail > 0 ? (profit / totalRetail) * 100 : 0;
+    return { totalRetail, totalOrderCost, profit, marginPercent };
+  };
+
+  // Derive unfulfilled order lists (processing status and no AWB registered yet)
+  const unfulfilledOrders = initialOrders.filter((o) => {
+    return o.displayFulfillmentStatus !== "FULFILLED" && !getOrderAwb(o) && o.shippingAddress;
+  });
+
+  // Derived list of manifested shipments awaiting pickup
   const manifestedAwaitingPickup = initialOrders.filter((order) => {
     const awb = getOrderAwb(order);
     const pickup = getOrderPickupDetails(order);
@@ -146,7 +127,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
     return !!awb && !hasPickup;
   });
 
-  // 2. Aggregate active scheduled pickups across orders
+  // Scheduled pickups summaries
   const scheduledPickups = initialOrders.reduce((acc: any[], order) => {
     const pickup = getOrderPickupDetails(order);
     if (pickup) {
@@ -169,7 +150,89 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
 
   const manifestedOrders = initialOrders.filter((order) => !!getOrderAwb(order));
 
-  // 3. Handler to call bulk pickup request API
+  // Initialize defaults for checked items
+  const handleToggleUnfulfilled = (orderId: string) => {
+    setSelectedUnfulfilled(prev => {
+      const isChecking = !prev[orderId];
+      const next = { ...prev, [orderId]: isChecking };
+      
+      if (isChecking && !orderDimensions[orderId]) {
+        setOrderDimensions(dims => ({
+          ...dims,
+          [orderId]: {
+            weightGrams: "500", // Default: 500 grams (0.5 kg)
+            length: "30",       // Default: 30 cm
+            width: "20",        // Default: 20 cm
+            height: "5"         // Default: 5 cm
+          }
+        }));
+      }
+      return next;
+    });
+  };
+
+  const handleDimensionChange = (orderId: string, field: string, value: string) => {
+    setOrderDimensions(prev => ({
+      ...prev,
+      [orderId]: {
+        ...prev[orderId],
+        [field]: value.replace(/\D/g, "")
+      }
+    }));
+  };
+
+  // Submit Handler for Bulk Process
+  const handleBulkManifestAndPickup = async () => {
+    const checkedOrderIds = Object.keys(selectedUnfulfilled).filter(id => selectedUnfulfilled[id]);
+    if (checkedOrderIds.length === 0) return;
+
+    setScheduling(true);
+    setPickupError(null);
+    setPickupSuccess(null);
+
+    const ordersData = checkedOrderIds.map(id => ({
+      orderId: id,
+      weightGrams: orderDimensions[id]?.weightGrams || "500",
+      length: orderDimensions[id]?.length || "30",
+      width: orderDimensions[id]?.width || "20",
+      height: orderDimensions[id]?.height || "5"
+    }));
+
+    try {
+      const res = await fetch("/api/orders/bulk-process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orders: ordersData,
+          pickupDate,
+          pickupTime
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setPickupError(data.error || "Failed to process bulk manifests & scheduling.");
+      } else {
+        let msg = `Successfully processed ${ordersData.length} orders! AWB registered.`;
+        if (data.pickupId && data.pickupId !== "N/A") {
+          msg += ` Scheduled Delhivery Pickup ID: ${data.pickupId}`;
+        }
+        if (data.pickupError) {
+          msg += ` (Logistics pickup schedule warning: ${data.pickupError})`;
+        }
+        setPickupSuccess(msg);
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000);
+      }
+    } catch {
+      setPickupError("Network error. Could not complete bulk workflow request.");
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  // Legacy scheduled pickups handlers
   const handleScheduleDailyPickup = async () => {
     if (manifestedAwaitingPickup.length === 0) {
       setPickupError("No manifested shipments are currently awaiting pickup.");
@@ -211,11 +274,9 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
     }
   };
 
-
   const [cancellingPickupId, setCancellingPickupId] = useState<string | null>(null);
 
   const handleCancelPickup = async (pickupId: string, orderNames: string[]) => {
-    // Find matching order objects to get their Shopify GIDs
     const matchedOrderIds = initialOrders
       .filter(o => orderNames.includes(o.name))
       .map(o => o.id);
@@ -247,36 +308,117 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
     }
   };
 
+  // Manual Fulfillment States
+  const [manualFulfillOrderId, setManualFulfillOrderId] = useState<string | null>(null);
+  const [manualAwb, setManualAwb] = useState("");
+  const [manualCourier, setManualCourier] = useState("");
+  const [manualFulfilling, setManualFulfilling] = useState(false);
+
+  const handleManualFulfillSubmit = async (orderId: string) => {
+    if (!manualAwb || !manualCourier) {
+      alert("Please enter AWB number and select Courier Partner.");
+      return;
+    }
+    setManualFulfilling(true);
+    try {
+      const res = await fetch("/api/orders/fulfill-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          awb: manualAwb,
+          courierPartner: manualCourier,
+          action: "dispatch",
+        }),
+      });
+      if (res.ok) {
+        alert("Order successfully manually fulfilled (dispatched)!");
+        setManualFulfillOrderId(null);
+        setManualAwb("");
+        setManualCourier("");
+        window.location.reload();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to manually fulfill order.");
+      }
+    } catch {
+      alert("Network error occurred.");
+    } finally {
+      setManualFulfilling(false);
+    }
+  };
+
+  const handleMarkDeliveredSubmit = async (orderId: string) => {
+    setManualFulfilling(true);
+    try {
+      const res = await fetch("/api/orders/fulfill-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          action: "deliver",
+        }),
+      });
+      if (res.ok) {
+        alert("Order successfully marked as Delivered!");
+        window.location.reload();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to mark delivered.");
+      }
+    } catch {
+      alert("Network error occurred.");
+    } finally {
+      setManualFulfilling(false);
+    }
+  };
+
+  const filteredOrders = initialOrders.filter((order) => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return true;
+
+    const orderName = String(order.name || "").toLowerCase();
+    const customerName = `${order.customer?.firstName || ""} ${order.customer?.lastName || ""}`.toLowerCase();
+    const shippingName = `${order.shippingAddress?.firstName || ""} ${order.shippingAddress?.lastName || ""}`.toLowerCase();
+    const phone = String(order.customer?.phone || order.shippingAddress?.phone || "").toLowerCase();
+    const tags = order.tags?.join(" ").toLowerCase() || "";
+
+    return (
+      orderName.includes(query) ||
+      customerName.includes(query) ||
+      shippingName.includes(query) ||
+      phone.includes(query) ||
+      tags.includes(query)
+    );
+  });
+
+  const getMarginColor = (margin: number) => {
+    if (margin >= 40) return "text-green-600 bg-green-50 border-green-200";
+    if (margin >= 20) return "text-yellow-600 bg-yellow-50 border-yellow-200";
+    return "text-red-600 bg-red-50 border-red-200";
+  };
+
+  const checkedCount = Object.keys(selectedUnfulfilled).filter(id => selectedUnfulfilled[id]).length;
+
   return (
     <div className="space-y-6">
       
-      {/* Top Title Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/40 border border-[#4A154B]/10 rounded-2xl p-4 sm:p-6 backdrop-blur-md">
-        <div>
-          <h3 className="font-display font-bold text-base sm:text-lg text-[#4A154B] flex items-center gap-2">
-            <Receipt size={18} className="text-[#D4AF37]" />
-            Live Customer Orders
-          </h3>
-          <p className="text-[11px] text-[#1A1A1A]/60 mt-0.5">
-            Audit customer payments, dynamic delivery states, and weaver profit margins.
-          </p>
-        </div>
-
-        {/* Search Input */}
-        <div className="relative w-full sm:w-72">
+      {/* Top Search & Actions Bar (Integrated on the top, taking minimal vertical space) */}
+      <div className="flex justify-between items-center bg-white/40 border border-[#4A154B]/10 rounded-xl p-2.5 backdrop-blur-md">
+        <div className="relative w-full">
           <input
             type="text"
-            placeholder="Search by Order #, Name..."
+            placeholder="Search orders by name, number, tags..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-10 pl-9 pr-4 rounded-xl border border-[#4A154B]/10 bg-white text-xs outline-none focus:border-[#4A154B] focus:ring-1 focus:ring-[#4A154B]/10 transition-all font-semibold"
+            className="w-full h-9 pl-9 pr-4 rounded-lg border border-[#4A154B]/10 bg-white text-xs outline-none focus:border-[#4A154B] focus:ring-1 focus:ring-[#4A154B]/10 transition-all font-semibold cursor-pointer"
           />
-          <Search size={14} className="absolute left-3 top-3 text-[#1A1A1A]/40" />
+          <Search size={14} className="absolute left-3 top-2.5 text-[#1A1A1A]/40" />
         </div>
       </div>
 
       {/* Daily Logistics Pickup Coordinator Panel */}
-      <div className="bg-white border border-[#4A154B]/10 rounded-2xl p-5 shadow-sm space-y-4">
+      <div className="bg-white border border-[#4A154B]/10 rounded-2xl p-5 shadow-sm space-y-5">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#4A154B]/5 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[#4A154B]/5 text-[#4A154B]">
@@ -287,7 +429,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                 Daily Logistics Pickup Coordinator
               </h4>
               <p className="text-[11px] text-[#1A1A1A]/55">
-                Manage daily Delhivery pickups and map manifested packages to scheduled pickup runs.
+                Fulfill unmanifested orders and request courier pickup runs in bulk.
               </p>
             </div>
           </div>
@@ -302,14 +444,258 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
           )}
         </div>
 
+        {/* Dynamic Section: Unfulfilled Orders Queue */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-center text-xs">
+            <span className="font-bold text-[#4A154B] uppercase tracking-wider text-[10px]">
+              Unfulfilled Orders awaiting Shipment & Pickup
+            </span>
+            {checkedCount > 0 && (
+              <span className="text-[11px] bg-emerald-50 text-emerald-700 font-bold px-2.5 py-0.5 rounded-full border border-emerald-200">
+                {checkedCount} Selected for Processing
+              </span>
+            )}
+          </div>
+
+          {unfulfilledOrders.length === 0 ? (
+            <div className="p-5 text-center text-xs text-[#1A1A1A]/50 bg-[#FAF8F5] border border-dashed border-[#4A154B]/10 rounded-xl font-medium">
+              🎉 All customer orders have been successfully manifested. No unfulfilled queue left.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Table list of unfulfilled */}
+              <div className="overflow-x-auto border border-[#4A154B]/10 rounded-xl">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[#4A154B]/5 bg-[#FAF8F5] text-[10px] uppercase font-bold text-[#1A1A1A]/55">
+                      <th className="py-2.5 px-4 w-12 text-center">Select</th>
+                      <th className="py-2.5 px-4 w-28">Order</th>
+                      <th className="py-2.5 px-4 w-44">Customer</th>
+                      <th className="py-2.5 px-4">Parcel Specs (Required on Selection)</th>
+                      <th className="py-2.5 px-4 w-52">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#4A154B]/5 bg-white font-semibold">
+                    {unfulfilledOrders.map((o) => {
+                      const isChecked = !!selectedUnfulfilled[o.id];
+                      const dims = orderDimensions[o.id] || { weightGrams: "500", length: "30", width: "20", height: "5" };
+                      const customerName = `${o.shippingAddress?.firstName || o.customer?.firstName || "Customer"} ${o.shippingAddress?.lastName || o.customer?.lastName || ""}`.trim();
+
+                      return (
+                        <tr key={o.id} className={`hover:bg-[#FAF8F5]/30 ${isChecked ? "bg-[#4A154B]/5" : ""}`}>
+                          {/* Checkbox */}
+                          <td className="py-3 px-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleUnfulfilled(o.id)}
+                              className="w-4 h-4 rounded text-[#4A154B] focus:ring-[#4A154B]/20 border-[#4A154B]/10 cursor-pointer"
+                            />
+                          </td>
+                          {/* Order ID */}
+                          <td className="py-3 px-4 font-bold text-[#4A154B]">{o.name}</td>
+                          {/* Customer */}
+                          <td className="py-3 px-4">
+                            <div>
+                              <p className="text-[#1A1A1A] font-semibold">{customerName}</p>
+                              <p className="text-[11px] text-[#1A1A1A]/50 mt-0.5">{o.shippingAddress?.city || "N/A"}</p>
+                            </div>
+                          </td>
+                          {/* Inputs: weight and dimensions */}
+                          <td className="py-3 px-4">
+                            <div className="flex flex-wrap items-center gap-3">
+                              {/* Weight */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] text-[#1A1A1A]/50">Weight:</span>
+                                <input
+                                  type="text"
+                                  disabled={!isChecked}
+                                  value={dims.weightGrams}
+                                  onChange={(e) => handleDimensionChange(o.id, "weightGrams", e.target.value)}
+                                  className="w-16 h-8 text-center rounded-lg border border-[#4A154B]/15 bg-white disabled:opacity-40 text-xs outline-none focus:border-[#4A154B] font-bold"
+                                />
+                                <span className="text-[11px] text-[#1A1A1A]/50 font-normal">g</span>
+                              </div>
+                              {/* Dimensions L x W x H */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] text-[#1A1A1A]/50">Size (L×W×H):</span>
+                                <input
+                                  type="text"
+                                  disabled={!isChecked}
+                                  value={dims.length}
+                                  onChange={(e) => handleDimensionChange(o.id, "length", e.target.value)}
+                                  className="w-10 h-8 text-center rounded-lg border border-[#4A154B]/15 bg-white disabled:opacity-40 text-xs outline-none focus:border-[#4A154B]"
+                                />
+                                <span className="text-[10px] text-[#1A1A1A]/40 font-normal">×</span>
+                                <input
+                                  type="text"
+                                  disabled={!isChecked}
+                                  value={dims.width}
+                                  onChange={(e) => handleDimensionChange(o.id, "width", e.target.value)}
+                                  className="w-10 h-8 text-center rounded-lg border border-[#4A154B]/15 bg-white disabled:opacity-40 text-xs outline-none focus:border-[#4A154B]"
+                                />
+                                <span className="text-[10px] text-[#1A1A1A]/40 font-normal">×</span>
+                                <input
+                                  type="text"
+                                  disabled={!isChecked}
+                                  value={dims.height}
+                                  onChange={(e) => handleDimensionChange(o.id, "height", e.target.value)}
+                                  className="w-10 h-8 text-center rounded-lg border border-[#4A154B]/15 bg-white disabled:opacity-40 text-xs outline-none focus:border-[#4A154B]"
+                                />
+                                <span className="text-[11px] text-[#1A1A1A]/50 font-normal">cm</span>
+                              </div>
+                            </div>
+                          </td>
+                          {/* Manual Fulfill column */}
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setManualFulfillOrderId(manualFulfillOrderId === o.id ? null : o.id)}
+                                className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-[#4A154B]/5 text-[#4A154B] hover:bg-[#4A154B]/10 cursor-pointer transition-all"
+                              >
+                                {manualFulfillOrderId === o.id ? "Cancel" : "Manual Fulfill"}
+                              </button>
+                              
+                              {manualFulfillOrderId === o.id && (
+                                <div className="mt-2 p-2.5 bg-[#FAF8F5] border border-[#4A154B]/10 rounded-lg space-y-2 text-[11px] font-semibold">
+                                  <div>
+                                    <label className="block text-[9px] uppercase font-bold text-[#4A154B]/60 mb-1">AWB Number</label>
+                                    <input
+                                      type="text"
+                                      value={manualAwb}
+                                      onChange={(e) => setManualAwb(e.target.value)}
+                                      placeholder="Enter AWB"
+                                      className="w-full h-8 px-2 rounded border border-[#4A154B]/15 bg-white text-xs outline-none focus:border-[#4A154B]"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] uppercase font-bold text-[#4A154B]/60 mb-1">Courier Partner</label>
+                                    <select
+                                      value={manualCourier}
+                                      onChange={(e) => setManualCourier(e.target.value)}
+                                      className="w-full h-8 px-2 rounded border border-[#4A154B]/15 bg-white text-xs outline-none focus:border-[#4A154B] cursor-pointer"
+                                    >
+                                      <option value="">Select Partner</option>
+                                      <option value="Delhivery">Delhivery</option>
+                                      <option value="Shiprocket">Shiprocket</option>
+                                      <option value="Bluedart">Bluedart</option>
+                                      <option value="DTDC">DTDC</option>
+                                      <option value="India Post">India Post</option>
+                                      <option value="Professional Couriers">Professional Couriers</option>
+                                      <option value="Ekart Logistics">Ekart Logistics</option>
+                                      <option value="Shadowfax">Shadowfax</option>
+                                      <option value="Xpressbees">Xpressbees</option>
+                                      <option value="SafeExpress">SafeExpress</option>
+                                      <option value="Trackon">Trackon</option>
+                                      <option value="Anjani">Anjani</option>
+                                      <option value="Shree Maruti Courier">Shree Maruti Courier</option>
+                                    </select>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled={!manualAwb || !manualCourier || manualFulfilling}
+                                    onClick={() => handleManualFulfillSubmit(o.id)}
+                                    className="w-full h-8 rounded bg-green-600 hover:bg-green-700 text-white font-bold uppercase text-[10px] tracking-wider transition-all disabled:opacity-50 cursor-pointer"
+                                  >
+                                    {manualFulfilling ? "Fulfilling..." : "Mark Dispatched"}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Bulk Dispatch Scheduler Drawer/Options shown when 1+ checked */}
+              {checkedCount > 0 && (
+                <div className="p-4 bg-[#4A154B]/5 border border-[#4A154B]/15 rounded-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <span className="text-[11px] font-bold text-[#4A154B]">
+                      ⚡ Setup bulk pickup schedule for {checkedCount} parcel(s)
+                    </span>
+                    <span className="text-[10px] text-[#1A1A1A]/60 italic font-medium">
+                      One button click registers Delhivery waybills and sets up the pickup
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] uppercase font-bold text-[#4A154B]/60 tracking-wider">
+                        Pickup Date
+                      </label>
+                      <select
+                        value={pickupDate}
+                        onChange={(e) => {
+                          const newDate = e.target.value;
+                          setPickupDate(newDate);
+                          const day = availableDays.find(d => d.date === newDate);
+                          if (day && day.slots.length > 0) {
+                            setPickupTime(day.slots[0].value);
+                          }
+                        }}
+                        className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
+                      >
+                        {availableDays.map((d) => (
+                          <option key={d.date} value={d.date}>{d.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] uppercase font-bold text-[#4A154B]/60 tracking-wider">
+                        Time Slot
+                      </label>
+                      <select
+                        value={pickupTime}
+                        onChange={(e) => setPickupTime(e.target.value)}
+                        className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
+                      >
+                        {currentSlots.map((s) => (
+                          <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {pickupError && (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-xl border border-red-200 text-xs font-semibold">
+                      ⚠️ {pickupError}
+                    </div>
+                  )}
+
+                  {pickupSuccess && (
+                    <div className="p-3 bg-green-50 text-green-700 rounded-xl border border-green-200 text-xs font-semibold">
+                      ✅ {pickupSuccess}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleBulkManifestAndPickup}
+                    disabled={scheduling || loadingSlots}
+                    className="w-full h-11 rounded-xl text-xs font-bold uppercase tracking-wider bg-green-600 hover:bg-green-700 text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Truck size={14} />
+                    {scheduling ? "Processing Bulk Fulfillments..." : `Fulfill & Request Bulk Pickup (${checkedCount} orders)`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Warning Alert if there are unscheduled manifested orders while a pickup is active */}
         {scheduledPickups.length > 0 && manifestedAwaitingPickup.length > 0 && (
           <div className="p-3.5 bg-amber-50 border border-amber-200/70 rounded-xl space-y-2 text-xs text-amber-900">
             <p className="font-bold flex items-center gap-1.5 text-amber-800">
-              ⚠️ {manifestedAwaitingPickup.length} New Manifested Package(s) Awaiting Pickup
+              ⚠️ {manifestedAwaitingPickup.length} Manifested Package(s) Awaiting Pickup
             </p>
             <p className="text-[10px] text-amber-800/80 leading-relaxed font-semibold">
-              Delhivery does not allow adding new packages to an already scheduled pickup ID. You must either cancel the current pickup request to schedule a fresh one for all packages, or schedule a separate run (e.g. next day slot).
+              Delhivery does not allow adding new packages to an already scheduled pickup ID. You must either cancel the current pickup request to schedule a fresh one for all packages, or schedule a separate run.
             </p>
             <div className="flex gap-2 pt-1 font-bold">
               <button
@@ -345,7 +731,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
 
         {/* Scheduled Pickups Status */}
         {scheduledPickups.length > 0 ? (
-          <div className="space-y-2.5">
+          <div className="space-y-2.5 border-t border-[#4A154B]/5 pt-4">
             <span className="text-[9px] uppercase font-bold text-[#4A154B]/55 tracking-wider block">
               Active scheduled pickups for the day
             </span>
@@ -380,87 +766,89 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
             </div>
           </div>
         ) : (
-          /* Show scheduler directly if no pickup is scheduled */
-          <div className="p-4 bg-[#FAF8F5] border border-[#4A154B]/5 rounded-xl space-y-4">
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-bold text-[#4A154B]">
-                No Daily Pickup Scheduled yet.
-              </span>
-              {manifestedAwaitingPickup.length > 0 && (
-                <span className="text-[10px] text-[#1A1A1A]/60 italic font-medium">
-                  {manifestedAwaitingPickup.length} manifested shipments awaiting pickup ({manifestedAwaitingPickup.map(o => o.name).join(", ")})
+          /* Show scheduler directly if no pickup is scheduled and no bulk orders are selected */
+          checkedCount === 0 && unfulfilledOrders.length > 0 && (
+            <div className="p-4 bg-[#FAF8F5] border border-[#4A154B]/5 rounded-xl space-y-4">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-[#4A154B]">
+                  No Daily Pickup Scheduled yet.
                 </span>
+                {manifestedAwaitingPickup.length > 0 && (
+                  <span className="text-[10px] text-[#1A1A1A]/60 italic font-medium">
+                    {manifestedAwaitingPickup.length} manifested shipments awaiting pickup ({manifestedAwaitingPickup.map(o => o.name).join(", ")})
+                  </span>
+                )}
+              </div>
+
+              {manifestedAwaitingPickup.length === 0 ? (
+                <div className="p-3.5 text-center text-xs text-[#1A1A1A]/50 bg-white border border-dashed border-[#4A154B]/10 rounded-xl font-medium leading-relaxed">
+                  🎉 No manifested shipments are currently awaiting pickup. All orders are either dispatched or unscheduled.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] uppercase font-bold text-[#4A154B]/60 tracking-wider">
+                        Pickup Date (Delhivery Available)
+                      </label>
+                      <select
+                        value={pickupDate}
+                        onChange={(e) => {
+                          const newDate = e.target.value;
+                          setPickupDate(newDate);
+                          const day = availableDays.find(d => d.date === newDate);
+                          if (day && day.slots.length > 0) {
+                            setPickupTime(day.slots[0].value);
+                          }
+                        }}
+                        className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
+                      >
+                        {availableDays.map((d) => (
+                          <option key={d.date} value={d.date}>{d.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] uppercase font-bold text-[#4A154B]/60 tracking-wider">
+                        Time Slot
+                      </label>
+                      <select
+                        value={pickupTime}
+                        onChange={(e) => setPickupTime(e.target.value)}
+                        className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
+                      >
+                        {currentSlots.map((s) => (
+                          <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {pickupError && (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-xl border border-red-200 text-xs font-semibold">
+                      ⚠️ {pickupError}
+                    </div>
+                  )}
+
+                  {pickupSuccess && (
+                    <div className="p-3 bg-green-50 text-green-700 rounded-xl border border-green-200 text-xs font-semibold">
+                      ✅ {pickupSuccess}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleScheduleDailyPickup}
+                    disabled={scheduling || loadingSlots}
+                    className="w-full h-10 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#4A154B] text-white shadow-md shadow-[#4A154B]/10 hover:opacity-90 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Calendar size={14} />
+                    {scheduling ? "Raising Dispatch Request..." : "Request Daily Pickup"}
+                  </button>
+                </div>
               )}
             </div>
-
-            {manifestedAwaitingPickup.length === 0 ? (
-              <div className="p-3.5 text-center text-xs text-[#1A1A1A]/50 bg-white border border-dashed border-[#4A154B]/10 rounded-xl font-medium leading-relaxed">
-                🎉 No manifested shipments are currently awaiting pickup. All orders are either dispatched or unscheduled.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-bold text-[#4A154B]/60 tracking-wider">
-                      Pickup Date (Delhivery Available)
-                    </label>
-                    <select
-                      value={pickupDate}
-                      onChange={(e) => {
-                        const newDate = e.target.value;
-                        setPickupDate(newDate);
-                        const day = availableDays.find(d => d.date === newDate);
-                        if (day && day.slots.length > 0) {
-                          setPickupTime(day.slots[0].value);
-                        }
-                      }}
-                      className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-xs outline-none focus:border-[#4A154B] font-semibold"
-                    >
-                      {availableDays.map((d) => (
-                        <option key={d.date} value={d.date}>{d.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-bold text-[#4A154B]/60 tracking-wider">
-                      Time Slot
-                    </label>
-                    <select
-                      value={pickupTime}
-                      onChange={(e) => setPickupTime(e.target.value)}
-                      className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-xs outline-none focus:border-[#4A154B] font-semibold"
-                    >
-                      {currentSlots.map((s) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {pickupError && (
-                  <div className="p-3 bg-red-50 text-red-700 rounded-xl border border-red-200 text-xs font-semibold">
-                    ⚠️ {pickupError}
-                  </div>
-                )}
-
-                {pickupSuccess && (
-                  <div className="p-3 bg-green-50 text-green-700 rounded-xl border border-green-200 text-xs font-semibold">
-                    ✅ {pickupSuccess}
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleScheduleDailyPickup}
-                  disabled={scheduling || loadingSlots}
-                  className="w-full h-10 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#4A154B] text-white shadow-md shadow-[#4A154B]/10 hover:opacity-90 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Calendar size={14} />
-                  {scheduling ? "Raising Dispatch Request..." : "Request Daily Pickup"}
-                </button>
-              </div>
-            )}
-          </div>
+          )
         )}
 
         {/* Collapsible scheduler form drawer if there is an active pickup, but they want to schedule another one */}
@@ -484,7 +872,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                       setPickupTime(day.slots[0].value);
                     }
                   }}
-                  className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-xs outline-none focus:border-[#4A154B] font-semibold"
+                  className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
                 >
                   {availableDays.map((d) => (
                     <option key={d.date} value={d.date}>{d.label}</option>
@@ -498,7 +886,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                 <select
                   value={pickupTime}
                   onChange={(e) => setPickupTime(e.target.value)}
-                  className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-xs outline-none focus:border-[#4A154B] font-semibold"
+                  className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
                 >
                   {currentSlots.map((s) => (
                     <option key={s.value} value={s.value}>{s.label}</option>
@@ -530,10 +918,10 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
               <table className="w-full text-left border-collapse text-[11px]">
                 <thead>
                   <tr className="border-b border-[#4A154B]/5 bg-[#FAF8F5] text-[9px] uppercase font-bold text-[#1A1A1A]/55">
-                    <th className="py-2 px-3">Order</th>
-                    <th className="py-2 px-3">AWB / Tracking ID</th>
-                    <th className="py-2 px-3">Pickup Status</th>
-                    <th className="py-2 px-3 text-right">Actions</th>
+                    <th className="py-2.5 px-3">Order</th>
+                    <th className="py-2.5 px-3">AWB / Tracking ID</th>
+                    <th className="py-2.5 px-3">Pickup Status</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#4A154B]/5 bg-white font-semibold">
@@ -559,11 +947,32 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          {!pickup ? (
-                            <span className="text-[10px] text-amber-700 font-semibold italic">Awaiting scheduling</span>
-                          ) : (
-                            <span className="text-[10px] text-green-700 font-semibold">Assigned to pickup {pickup.id}</span>
-                          )}
+                          {(() => {
+                            const deliveryStatusAttr = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "delivery_status");
+                            const deliveryStatus = deliveryStatusAttr?.value || (order.tags?.includes("delivery_status:delivered") ? "delivered" : "dispatched");
+
+                            if (deliveryStatus === "delivered") {
+                              return <span className="text-[10px] text-green-700 font-bold uppercase">Delivered</span>;
+                            }
+
+                            return (
+                              <div className="flex justify-end gap-2 items-center">
+                                {pickup ? (
+                                  <span className="text-[10px] text-green-700 font-semibold">Assigned (ID: {pickup.id})</span>
+                                ) : (
+                                  <span className="text-[10px] text-amber-700 font-semibold italic">Awaiting pickup</span>
+                                )}
+                                <button
+                                  type="button"
+                                  disabled={manualFulfilling}
+                                  onClick={() => handleMarkDeliveredSubmit(order.id)}
+                                  className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
+                                >
+                                  Mark Delivered
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
@@ -580,7 +989,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-[#4A154B]/5 bg-[#FAF8F5]/50 text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">
+              <tr className="border-b border-[#4A154B]/5 bg-[#FAF8F5]/50 text-[11px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">
                 <th className="py-4 px-6">Order</th>
                 <th className="py-4 px-6">Date</th>
                 <th className="py-4 px-6">Customer</th>
@@ -591,7 +1000,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                 <th className="py-4 px-6 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#4A154B]/5 text-xs">
+            <tbody className="divide-y divide-[#4A154B]/5 text-sm">
               {filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-[#1A1A1A]/40 font-medium">
@@ -638,7 +1047,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                               : "Customer"}
                           </p>
                           {order.shippingAddress?.city && (
-                            <p className="text-[10px] text-[#1A1A1A]/40 flex items-center gap-0.5 mt-0.5">
+                            <p className="text-[11px] text-[#1A1A1A]/40 flex items-center gap-0.5 mt-0.5">
                               <MapPin size={10} />
                               {order.shippingAddress.city}
                             </p>
@@ -650,7 +1059,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                       <td className="py-4 px-6 text-right font-display font-bold text-[#4A154B]">
                         <div>
                           <p>₹{totalRetail.toLocaleString("en-IN")}</p>
-                          <span className={`inline-block text-[8px] font-bold uppercase rounded px-1 mt-0.5 ${
+                          <span className={`inline-block text-[9px] font-bold uppercase rounded px-1 mt-0.5 ${
                             isPaid ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"
                           }`}>
                             {order.displayFinancialStatus}
@@ -660,7 +1069,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
 
                       {/* Calculated private net margins */}
                       <td className="py-4 px-6 text-center whitespace-nowrap">
-                        <span className={`inline-block text-[10px] font-bold rounded-lg px-2.5 py-0.5 border ${getMarginColor(marginPercent)}`}>
+                        <span className={`inline-block text-[11px] font-bold rounded-lg px-2.5 py-0.5 border ${getMarginColor(marginPercent)}`}>
                           +{Math.round(marginPercent)}% Margin
                         </span>
                       </td>
@@ -668,7 +1077,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                       {/* Fulfillment/Delhivery */}
                       <td className="py-4 px-6 text-center whitespace-nowrap">
                         <div className="flex flex-col items-center gap-1">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
                             order.displayFulfillmentStatus === "FULFILLED" 
                               ? "bg-green-50 text-green-700 border-green-200" 
                               : "bg-yellow-50 text-yellow-700 border-yellow-200"
@@ -704,7 +1113,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                           const courierTag = order.tags?.find((tag: string) => tag.toLowerCase().startsWith("courier:"));
                           const courierName = courierTag && courierTag.split(":")[1]?.trim() !== "Shiprocket" ? courierTag.split(":")[1]?.trim() : "Delhivery";
                           return (
-                            <span className="inline-block text-[10px] font-bold rounded-lg px-2.5 py-0.5 border text-purple-700 bg-purple-50 border-purple-200">
+                            <span className="inline-block text-[11px] font-bold rounded-lg px-2.5 py-0.5 border text-purple-700 bg-purple-50 border-purple-200">
                               {courierName}
                             </span>
                           );
@@ -775,7 +1184,6 @@ function LogisticsStatusBadge({ awb }: { awb: string }) {
     return <span className="text-[9px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded font-mono">No tracking</span>;
   }
 
-  // Curated status styling matching modern design
   const getBadgeStyle = (s: string) => {
     const norm = s.toLowerCase();
     if (norm.includes("deliv")) return "bg-green-50 text-green-700 border-green-200";

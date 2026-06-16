@@ -426,6 +426,11 @@ export async function GET(req: NextRequest) {
     </p>
   </div>
 </div>
+<script>
+  window.onload = function() {
+    window.print();
+  };
+</script>
 </body>
 </html>`;
 

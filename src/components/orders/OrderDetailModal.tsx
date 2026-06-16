@@ -33,6 +33,34 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
   const [customerProfile, setCustomerProfile] = useState<any>(null);
   const [loadingCustomer, setLoadingCustomer] = useState(false);
 
+  const deliveryStatusAttr = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "delivery_status");
+  const initialDeliveryStatus = deliveryStatusAttr ? deliveryStatusAttr.value : (order.tags?.includes("delivery_status:delivered") ? "delivered" : "dispatched");
+  const [currentDeliveryStatus, setCurrentDeliveryStatus] = useState(initialDeliveryStatus);
+  const [markingDelivered, setMarkingDelivered] = useState(false);
+
+  const handleMarkDelivered = async () => {
+    setMarkingDelivered(true);
+    try {
+      const res = await fetch("/api/orders/fulfill-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, action: "deliver" }),
+      });
+      if (res.ok) {
+        setCurrentDeliveryStatus("delivered");
+        alert("Order successfully marked as Delivered!");
+        window.location.reload();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to mark delivered.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setMarkingDelivered(false);
+    }
+  };
+
   // Parse Razorpay IDs from Shopify Order Note
   const noteText = order.note || "";
   const orderIdMatch = noteText.match(/Order ID:\s*([^\s,]+)/i);
@@ -180,9 +208,9 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                 href={`/api/orders/receipt?orderId=${encodeURIComponent(order.id)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-amber-50 hover:bg-amber-100 text-[#4A154B] border border-[#D4AF37]/35 no-underline transition-all shadow-sm"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#4A154B] hover:bg-[#4A154B]/95 text-white border border-[#4A154B]/20 no-underline transition-all shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
-                <span>Receipt Copy 📄</span>
+                <span>Download PDF Receipt 📄</span>
               </a>
             </div>
             <p className="text-xs text-[#1A1A1A]/60 flex items-center gap-1 mt-1">
@@ -253,19 +281,6 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                     <span className="text-[#1A1A1A]/50">Total Spent:</span>
                     <span className="font-bold text-[#4A154B]">₹{parseFloat(customerProfile.amountSpent?.amount || "0").toLocaleString("en-IN")}</span>
                   </div>
-
-                  {customerProfile.addresses && customerProfile.addresses.length > 0 && (
-                    <div className="pt-1.5">
-                      <span className="text-[#1A1A1A]/50 block mb-1">Saved Addresses in Shopify:</span>
-                      <div className="max-h-20 overflow-y-auto space-y-1 bg-[#FAF8F5] p-1.5 rounded border border-[#4A154B]/5 text-[10px] text-[#1A1A1A]/70">
-                        {customerProfile.addresses.map((addr: any, idx: number) => (
-                          <div key={idx} className="pb-1 border-b border-[#1A1A1A]/5 last:border-b-0 last:pb-0">
-                            {addr.address1}, {addr.city} - {addr.zip}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -308,19 +323,38 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                       </p>
                     )}
                   </div>
-                  
-                  <div className="text-right flex items-center gap-4">
-                    <div className="text-xs">
-                      <p className="text-[#1A1A1A]/50">Retail: <span className="font-semibold text-[#1A1A1A]">₹{item.price.toLocaleString("en-IN")}</span></p>
-                      <p className="text-[#1A1A1A]/50 mt-0.5">Weaver: <span className="font-semibold text-[#1A1A1A]">₹{item.costPrice.toLocaleString("en-IN")}</span></p>
-                    </div>
-                    
-                    <span className={`text-[10px] font-bold rounded-lg px-2.5 py-1 ${getMarginColor(item.margin)}`}>
-                       +{Math.round(item.margin)}% Margin
-                    </span>
-                  </div>
                 </div>
               ))}
+            </div>
+
+            {/* Prepaid Payment secured (Razorpay) info merged here */}
+            <div className="mt-4 pt-4 border-t border-[#1A1A1A]/5 space-y-3">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-[#4A154B]">
+                <CreditCard size={14} />
+                <span>Prepaid Payment Secured (Razorpay)</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-2.5 bg-[#FAF8F5] rounded-lg border border-[#1A1A1A]/5">
+                  <span className="text-[9px] text-[#1A1A1A]/55 uppercase font-bold">Razorpay Order ID</span>
+                  <p className="font-mono mt-0.5 font-semibold text-[#4A154B] text-[11px]">{razorpayOrderId || "Awaiting Sync / COD"}</p>
+                </div>
+                <div className="p-2.5 bg-[#FAF8F5] rounded-lg border border-[#1A1A1A]/5">
+                  <span className="text-[9px] text-[#1A1A1A]/55 uppercase font-bold">Razorpay Payment ID</span>
+                  <p className="font-mono mt-0.5 font-semibold text-[#4A154B] text-[11px] flex items-center gap-1">
+                    {razorpayPaymentId || "Awaiting Capture"}
+                    {razorpayPaymentId && (
+                      <a 
+                        href={`https://dashboard.razorpay.com/app/payments/${razorpayPaymentId}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[#4A154B] hover:text-[#D4AF37]"
+                      >
+                        <ExternalLink size={11} />
+                      </a>
+                    )}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -394,6 +428,15 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
               </div>
 
               <div className="space-y-5">
+                {currentDeliveryStatus === "delivered" && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-xl flex items-center justify-between text-xs text-green-800 font-semibold">
+                    <span>Order has been manually marked as Delivered.</span>
+                    <span className="bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">
+                      Delivered
+                    </span>
+                  </div>
+                )}
+
                 {/* Status Display */}
                 {loadingTracking ? (
                   <div className="text-xs text-[#1A1A1A]/60 flex items-center gap-2 py-4 justify-center">
@@ -441,39 +484,24 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                     Awaiting courier manifestation.
                   </div>
                 )}
+
+                {currentDeliveryStatus !== "delivered" && (
+                  <div className="mt-4 pt-4 border-t border-[#4A154B]/5 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleMarkDelivered}
+                      disabled={markingDelivered}
+                      className="px-4 py-2 rounded-xl text-xs font-bold uppercase bg-green-600 hover:bg-green-700 text-white shadow transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {markingDelivered ? "Updating..." : "Mark Delivered"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Secure Payment details (Razorpay) */}
-          <div className="ui-card p-4 bg-white">
-            <h3 className="text-xs font-bold uppercase text-[#4A154B] border-b border-[#4A154B]/5 pb-2 flex items-center gap-1.5">
-              <CreditCard size={14} />
-              Prepaid Payment secured (Razorpay)
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 text-xs">
-              <div className="p-3 bg-[#FAF8F5] rounded-lg border border-[#1A1A1A]/5">
-                <span className="text-[10px] text-[#1A1A1A]/55 uppercase">Razorpay Order ID</span>
-                <p className="font-mono mt-1 font-semibold text-[#4A154B]">{razorpayOrderId || "Awaiting Sync / COD"}</p>
-              </div>
-              <div className="p-3 bg-[#FAF8F5] rounded-lg border border-[#1A1A1A]/5">
-                <span className="text-[10px] text-[#1A1A1A]/55 uppercase">Razorpay Payment ID</span>
-                <p className="font-mono mt-1 font-semibold text-[#4A154B] flex items-center gap-1">
-                  {razorpayPaymentId || "Awaiting Capture"}
-                  {razorpayPaymentId && (
-                    <a 
-                      href={`https://dashboard.razorpay.com/app/payments/${razorpayPaymentId}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-[#4A154B] hover:text-[#D4AF37]"
-                    >
-                      <ExternalLink size={12} />
-                    </a>
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
+
 
         </div>
 
