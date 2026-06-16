@@ -89,6 +89,13 @@ export default async function DashboardPage() {
       }
 
       // Categories
+      if (p.metafields?.fabric) {
+        const fabric = p.metafields.fabric.trim();
+        if (fabric && fabric.toLowerCase() !== 'nil') {
+          categoryCounts[fabric] = (categoryCounts[fabric] || 0) + 1;
+        }
+      }
+
       const tags = (p.tags || []).filter((t: string) => !["Founders-Exclusive", "All Sarees", "Best Sellers", "New Arrivals"].includes(t));
       tags.forEach((tag: string) => {
          categoryCounts[tag] = (categoryCounts[tag] || 0) + 1;

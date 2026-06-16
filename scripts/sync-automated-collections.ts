@@ -282,8 +282,8 @@ async function syncCollectionsFromCSV() {
 
     const currentProductIds = collection.products?.edges?.map((e: any) => e.node.id) || [];
 
-    const toAdd = targetProductIds.filter(id => !currentProductIds.includes(id));
-    const toRemove = currentProductIds.filter(id => !targetProductIds.includes(id));
+    const toAdd = targetProductIds.filter((id: string) => !currentProductIds.includes(id));
+    const toRemove = currentProductIds.filter((id: string) => !targetProductIds.includes(id));
 
     console.log(`  Target products based on CSV: ${details.skus.join(", ")}`);
     console.log(`  Matching Shopify IDs count: ${targetProductIds.length}`);

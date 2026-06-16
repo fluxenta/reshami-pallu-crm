@@ -220,7 +220,7 @@
     "imagesCount": 3,
     "images": [],
     "status": "success",
-    "timestamp": "2026-06-15T14:52:08.937Z",
+    "timestamp": "2026-06-16T06:21:36.108Z",
     "shopifyId": "gid://shopify/Product/8427116953670"
   },
   {
@@ -684,5 +684,75 @@
     "status": "success",
     "timestamp": "2026-06-15T14:52:10.992Z",
     "shopifyId": "gid://shopify/Product/8427118821446"
+  },
+  {
+    "serialNumber": "5",
+    "sku": "RP-SAREE-5",
+    "title": "tissue organza saree",
+    "price": 1949,
+    "costPrice": 1050,
+    "stock": 3,
+    "fabric": "Silk Blend",
+    "weave": "Embroidery",
+    "colors": "Blue",
+    "imagesCount": 8,
+    "images": [
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/acffb2d9-1075-4cb4-aed9-68d67b298625/RP-SAREE-5_model1_ai.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/ccb35361-e7a2-4640-9cdc-0337f3846d76/RP-SAREE-5_model2_ai.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/e434bcf7-4ce9-40e1-8c5a-12117998fcf0/RP-SAREE-5_model3_ai.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/1014dcfb-f83e-466b-9444-d6589f434417/RP-SAREE-5_IMG_1467.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/47a420fd-72bd-4643-9888-128747600159/RP-SAREE-5_IMG_1468.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/e857fc28-5476-4eb4-a56b-ea128b47c29e/RP-SAREE-5_IMG_1469.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/91b40656-49b1-43bd-aca8-b316c3c77bb3/RP-SAREE-5_IMG_1472.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/979b4d9d-861c-40b9-a013-088b0a509c44/RP-SAREE-5_IMG_1482.jpg"
+    ],
+    "status": "success",
+    "timestamp": "2026-06-16T06:14:45.593Z",
+    "shopifyId": "gid://shopify/Product/8427417501766"
+  },
+  {
+    "serialNumber": "7",
+    "sku": "RP-SAREE-7",
+    "title": "Organza Floral Embroidered Saree",
+    "price": 1549,
+    "costPrice": 850,
+    "stock": 3,
+    "fabric": "Organza",
+    "weave": "Appliqué Work",
+    "colors": "Peach, Orange",
+    "imagesCount": 6,
+    "images": [
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/08838364-4a75-4eca-bffb-274bee69e358/RP-SAREE-7_model1_ai.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/2b26eb70-6a38-483e-be78-c25154c832d6/RP-SAREE-7_model2_ai.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/ce0a7ca3-a5fe-4acb-9f61-9a086a430664/RP-SAREE-7_model3_ai.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/ed192a56-b85c-4895-a872-fe1f47ed2f2a/RP-SAREE-7_d588d0d5-d330-4f53-b157-77b788c0fafc.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/d930e5c9-2e60-4dc1-922a-5dfcc585dccf/RP-SAREE-7_IMG_0717.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/88e908cb-03e2-4b37-9f96-8c586a6fd250/RP-SAREE-7_IMG_0746.jpg"
+    ],
+    "status": "success",
+    "timestamp": "2026-06-16T06:17:14.758Z",
+    "shopifyId": "gid://shopify/Product/8427417796678"
+  },
+  {
+    "serialNumber": "36",
+    "sku": "RP-SAREE-36",
+    "title": "scalloped-border organza saree",
+    "price": 2037,
+    "costPrice": 1245,
+    "stock": 4,
+    "fabric": "Organza",
+    "weave": "Textured Weave",
+    "colors": "Blue",
+    "imagesCount": 5,
+    "images": [
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/6fac4873-1be0-4e96-8fed-573593555ef4/RP-SAREE-36_039dc269-6f89-443c-a7b5-dcd140107b8d.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/f1543f8c-b275-4024-b663-a9a487fb5027/RP-SAREE-36_1153e070-b8c2-4b30-9048-e982c596e07b.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/6ebfc7bc-d1ba-4b78-ab12-3adb8b6a5642/RP-SAREE-36_a1ee5f31-77d5-41eb-88f5-9e6f7043fd50.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/3cb6f8ab-6820-45a3-8d21-766465422820/RP-SAREE-36_a69f5359-50eb-4373-bf45-6b0fbae80728.jpg",
+      "https://shopify-staged-uploads.storage.googleapis.com/tmp/73363128390/products/12f51a40-9322-4ec2-97d1-8584bdaf2e0c/RP-SAREE-36_b8785bd0-0726-421d-8b72-10109159ec41.jpg"
+    ],
+    "status": "success",
+    "timestamp": "2026-06-16T06:21:37.854Z",
+    "shopifyId": "gid://shopify/Product/8427421990982"
   }
 ]

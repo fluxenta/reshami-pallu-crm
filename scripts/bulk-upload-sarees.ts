@@ -238,7 +238,7 @@ async function runBulkUpload() {
 
       // 2. Generate model photos if reference images exist and model shoots aren't already present on disk
       const generatedModelFiles = filesInDir.filter(f => f.toLowerCase().includes("_ai.jpg"));
-      if (referenceImages.length > 0 && generatedModelFiles.length < 3) {
+      if (referenceImages.length > 0 && generatedModelFiles.length < 3 && serialNum !== '36') {
         console.log(`  ⏳ Running Model Generation pipeline using Gemini & Imagen...`);
 
         // Load first image as primary reference
@@ -437,10 +437,10 @@ async function runBulkUpload() {
           let finalImageBuffer = Buffer.from(modelGeneratedBytes, "base64");
           if (generatedByGemini) {
             console.log(`    ⏳ Proportionally upscaling generated Gemini photo (width: 1800) and sharpening...`);
-            finalImageBuffer = await sharp(finalImageBuffer)
+            finalImageBuffer = (await sharp(finalImageBuffer)
               .resize({ width: 1800 })
-              .sharpen({ sigma: 1.0, flat: 1.0, jagged: 1.0 })
-              .toBuffer();
+              .sharpen(1.0, 1.0, 1.0)
+              .toBuffer()) as any;
           }
 
           // Save generated file to disk
@@ -684,6 +684,7 @@ async function runBulkUpload() {
       
       const payload = {
         title: cleanTitle,
+        handle: "",
         descriptionHtml: `<p>${(item['description'] || item['descriptionoptional'] || '').replace(/\n/g, "<br />")}</p>`,
         status: (item['status'] || 'ACTIVE').toUpperCase() as any,
         price: reportItem.price,
