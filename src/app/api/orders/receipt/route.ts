@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { shopifyAdminFetch } from "@/lib/shopify";
 
 // Helper to escape HTML characters
 function escapeHtml(unsafe: any): string {
@@ -14,7 +15,9 @@ function escapeHtml(unsafe: any): string {
 
 /**
  * GET /api/orders/receipt?orderId=XXX
- * Returns a beautiful HTML order receipt for CRM admins, bypassing customer session checks.
+ * Returns a beautiful HTML order receipt.
+ * Fetches from Upstash Redis order summaries first.
+ * Fallback: Queries Shopify Admin GraphQL directly so the receipt can still render even if Redis cache is missing!
  */
 export async function GET(req: NextRequest) {
   try {
@@ -32,8 +35,106 @@ export async function GET(req: NextRequest) {
       summary = typeof cached === "string" ? JSON.parse(cached) : cached;
     }
 
+    // Fallback: If not found in Redis, query Shopify Admin directly
     if (!summary) {
-      return new NextResponse("Receipt data not found. It might not have been cached yet.", { status: 404 });
+      console.log(`[Receipt Fallback] Order summary not cached in Redis. Querying Shopify for ID: ${orderId}`);
+      
+      const query = `
+        query getOrderReceiptDetails($id: ID!) {
+          order(id: $id) {
+            id
+            name
+            createdAt
+            email
+            phone
+            subtotalPriceSet {
+              presentmentMoney { amount }
+            }
+            totalShippingPriceSet {
+              presentmentMoney { amount }
+            }
+            totalTaxSet {
+              presentmentMoney { amount }
+            }
+            totalDiscountsSet {
+              presentmentMoney { amount }
+            }
+            totalPriceSet {
+              presentmentMoney { amount }
+            }
+            shippingAddress {
+              firstName
+              lastName
+              address1
+              address2
+              city
+              province
+              zip
+              phone
+            }
+            lineItems(first: 50) {
+              edges {
+                node {
+                  title
+                  quantity
+                  variantTitle
+                  originalUnitPriceSet {
+                    presentmentMoney { amount }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      try {
+        const res = await shopifyAdminFetch<{ order: any }>({
+          query,
+          variables: { id: orderId }
+        });
+
+        if (res?.order) {
+          const shopifyOrder = res.order;
+          
+          // Map Shopify fields to match the receipt summary structure
+          summary = {
+            orderNumber: shopifyOrder.name,
+            orderDate: new Date(shopifyOrder.createdAt).toLocaleDateString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "numeric"
+            }),
+            confirmationEmail: shopifyOrder.email || "—",
+            customerPhone: shopifyOrder.phone || shopifyOrder.shippingAddress?.phone || "—",
+            shippingAddress: shopifyOrder.shippingAddress ? {
+              fullName: `${shopifyOrder.shippingAddress.firstName} ${shopifyOrder.shippingAddress.lastName || ""}`.trim(),
+              line1: shopifyOrder.shippingAddress.address1,
+              line2: shopifyOrder.shippingAddress.address2 || "",
+              city: shopifyOrder.shippingAddress.city,
+              state: shopifyOrder.shippingAddress.province,
+              pincode: shopifyOrder.shippingAddress.zip
+            } : null,
+            items: shopifyOrder.lineItems?.edges?.map((e: any) => ({
+              name: e.node.title,
+              qty: e.node.quantity,
+              variant: e.node.variantTitle || "Default Title",
+              price: parseFloat(e.node.originalUnitPriceSet?.presentmentMoney?.amount || "0")
+            })) || [],
+            subtotal: parseFloat(shopifyOrder.subtotalPriceSet?.presentmentMoney?.amount || "0"),
+            shipping: parseFloat(shopifyOrder.totalShippingPriceSet?.presentmentMoney?.amount || "0"),
+            tax: parseFloat(shopifyOrder.totalTaxSet?.presentmentMoney?.amount || "0"),
+            discount: -parseFloat(shopifyOrder.totalDiscountsSet?.presentmentMoney?.amount || "0"),
+            totalPaid: parseFloat(shopifyOrder.totalPriceSet?.presentmentMoney?.amount || "0")
+          };
+        }
+      } catch (shopifyErr) {
+        console.error("[Receipt Fallback Error] Querying Shopify failed:", shopifyErr);
+      }
+    }
+
+    if (!summary) {
+      return new NextResponse("Receipt data not found. This order ID does not exist in Shopify or Redis.", { status: 404 });
     }
 
     const orderNumber = summary.orderNumber || orderId || "—";
