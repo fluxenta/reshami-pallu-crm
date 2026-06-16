@@ -22,7 +22,7 @@ export default function Header({ title }: HeaderProps) {
   }, []);
 
   return (
-    <header className="hidden md:flex h-16 border-b border-[#4A154B]/10 bg-white/40 backdrop-blur-md px-4 sm:px-8 items-center justify-between sticky top-0 z-40 w-full">
+    <header className="h-16 border-b border-[#4A154B]/10 bg-white/40 backdrop-blur-md px-4 sm:px-8 flex items-center justify-between sticky top-0 z-40 w-full">
       {/* Title */}
       <div className="flex items-center gap-3">
         {/* Toggle Menu Hamburger for Mobile & Tablet */}

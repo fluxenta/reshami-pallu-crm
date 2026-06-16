@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import MobileNavigation from "./MobileNavigation";
 import { 
   Sparkles, 
   LayoutDashboard, 
@@ -95,7 +94,6 @@ export default function Sidebar() {
 
   return (
     <>
-      <MobileNavigation />
       {/* Backdrop overlay for mobile & tablet */}
       {isOpen && (
         <div 
