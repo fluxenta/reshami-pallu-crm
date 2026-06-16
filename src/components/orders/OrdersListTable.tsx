@@ -955,12 +955,22 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                               return <span className="text-[10px] text-green-700 font-bold uppercase">Delivered</span>;
                             }
 
-                            return (
+                             return (
                               <div className="flex justify-end gap-2 items-center">
                                 {pickup ? (
                                   <span className="text-[10px] text-green-700 font-semibold">Assigned (ID: {pickup.id})</span>
                                 ) : (
                                   <span className="text-[10px] text-amber-700 font-semibold italic">Awaiting pickup</span>
+                                )}
+                                {awb && (
+                                  <a
+                                    href={`/api/orders/packing-slip?awb=${awb}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2 py-1 bg-[#4A154B] hover:bg-[#4A154B]/90 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-all no-underline inline-block cursor-pointer"
+                                  >
+                                    Download Label
+                                  </a>
                                 )}
                                 <button
                                   type="button"
