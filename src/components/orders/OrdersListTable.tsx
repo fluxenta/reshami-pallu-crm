@@ -314,6 +314,54 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
   const [manualCourier, setManualCourier] = useState("");
   const [manualFulfilling, setManualFulfilling] = useState(false);
 
+  const [editingAwbOrderId, setEditingAwbOrderId] = useState<string | null>(null);
+  const [newAwbValue, setNewAwbValue] = useState("");
+  const [updatingAwb, setUpdatingAwb] = useState(false);
+
+  const getOrderCourierPartner = (order: any) => {
+    const courierAttr = order.customAttributes?.find(
+      (attr: any) => attr.key.toLowerCase() === "courier_partner"
+    );
+    if (courierAttr?.value) return courierAttr.value;
+
+    const courierTag = order.tags?.find((tag: string) => tag.toLowerCase().startsWith("courier:"));
+    if (courierTag) return courierTag.split(":")[1]?.trim();
+
+    return "Delhivery";
+  };
+
+  const handleUpdateAwb = async (orderId: string, courierPartner: string) => {
+    if (!newAwbValue.trim()) {
+      alert("Please enter a valid AWB number.");
+      return;
+    }
+    setUpdatingAwb(true);
+    try {
+      const res = await fetch("/api/orders/fulfill-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          awb: newAwbValue.trim(),
+          courierPartner,
+          action: "dispatch",
+        }),
+      });
+      if (res.ok) {
+        alert("AWB successfully updated!");
+        setEditingAwbOrderId(null);
+        window.location.reload();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to update AWB.");
+      }
+    } catch {
+      alert("Network error occurred.");
+    } finally {
+      setUpdatingAwb(false);
+    }
+  };
+
   const handleManualFulfillSubmit = async (orderId: string) => {
     if (!manualAwb || !manualCourier) {
       alert("Please enter AWB number and select Courier Partner.");
@@ -897,91 +945,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
               ))}
             </div>
           </div>
-        ) : (
-          /* Show scheduler directly if no pickup is scheduled and no bulk orders are selected */
-          checkedCount === 0 && unfulfilledOrders.length > 0 && (
-            <div className="p-4 bg-[#FAF8F5] border border-[#4A154B]/5 rounded-xl space-y-4">
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-[#4A154B]">
-                  No Daily Pickup Scheduled yet.
-                </span>
-                {manifestedAwaitingPickup.length > 0 && (
-                  <span className="text-[10px] text-[#1A1A1A]/60 italic font-medium">
-                    {manifestedAwaitingPickup.length} manifested shipments awaiting pickup ({manifestedAwaitingPickup.map(o => o.name).join(", ")})
-                  </span>
-                )}
-              </div>
-
-              {manifestedAwaitingPickup.length === 0 ? (
-                <div className="p-3.5 text-center text-xs text-[#1A1A1A]/50 bg-white border border-dashed border-[#4A154B]/10 rounded-xl font-medium leading-relaxed">
-                  🎉 No manifested shipments are currently awaiting pickup. All orders are either dispatched or unscheduled.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] uppercase font-bold text-[#4A154B]/60 tracking-wider">
-                        Pickup Date (Delhivery Available)
-                      </label>
-                      <select
-                        value={pickupDate}
-                        onChange={(e) => {
-                          const newDate = e.target.value;
-                          setPickupDate(newDate);
-                          const day = availableDays.find(d => d.date === newDate);
-                          if (day && day.slots.length > 0) {
-                            setPickupTime(day.slots[0].value);
-                          }
-                        }}
-                        className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
-                      >
-                        {availableDays.map((d) => (
-                          <option key={d.date} value={d.date}>{d.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] uppercase font-bold text-[#4A154B]/60 tracking-wider">
-                        Time Slot
-                      </label>
-                      <select
-                        value={pickupTime}
-                        onChange={(e) => setPickupTime(e.target.value)}
-                        className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
-                      >
-                        {currentSlots.map((s) => (
-                          <option key={s.value} value={s.value}>{s.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {pickupError && (
-                    <div className="p-3 bg-red-50 text-red-700 rounded-xl border border-red-200 text-xs font-semibold">
-                      ⚠️ {pickupError}
-                    </div>
-                  )}
-
-                  {pickupSuccess && (
-                    <div className="p-3 bg-green-50 text-green-700 rounded-xl border border-green-200 text-xs font-semibold">
-                      ✅ {pickupSuccess}
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleScheduleDailyPickup}
-                    disabled={scheduling || loadingSlots}
-                    className="w-full h-10 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#4A154B] text-white shadow-md shadow-[#4A154B]/10 hover:opacity-90 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Calendar size={14} />
-                    {scheduling ? "Raising Dispatch Request..." : "Request Daily Pickup"}
-                  </button>
-                </div>
-              )}
-            </div>
-          )
-        )}
+        ) : null}
 
         {/* Collapsible scheduler form drawer if there is an active pickup, but they want to schedule another one */}
         {scheduledPickups.length > 0 && showScheduler && (
@@ -1057,16 +1021,65 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#4A154B]/5 bg-white font-semibold">
-                  {manifestedOrders.map((order) => {
+                   {manifestedOrders.map((order) => {
                     const awb = getOrderAwb(order);
                     const pickup = getOrderPickupDetails(order);
+                    const deliveryStatusAttr = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "delivery_status");
+                    const deliveryStatus = deliveryStatusAttr?.value || (order.tags?.includes("delivery_status:delivered") ? "delivered" : "dispatched");
+                    const isManualFulfillment = order.customAttributes?.some((attr: any) => attr.key.toLowerCase() === "courier_partner") || order.tags?.some((t: string) => t.toLowerCase().startsWith("courier:"));
 
                     return (
                       <tr key={order.id} className="hover:bg-[#FAF8F5]/30">
                         <td className="py-2.5 px-3 font-bold text-[#4A154B]">{order.name}</td>
-                        <td className="py-2.5 px-3 font-mono text-[#1A1A1A]/70">{awb}</td>
+                        <td className="py-2.5 px-3 font-mono text-[#1A1A1A]/70">
+                          {editingAwbOrderId === order.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={newAwbValue}
+                                onChange={(e) => setNewAwbValue(e.target.value)}
+                                className="h-7 px-1.5 border border-[#4A154B]/20 rounded text-xs outline-none bg-white font-mono w-28"
+                              />
+                              <button
+                                type="button"
+                                disabled={updatingAwb || !newAwbValue.trim()}
+                                onClick={() => handleUpdateAwb(order.id, getOrderCourierPartner(order))}
+                                className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer"
+                              >
+                                {updatingAwb ? "..." : "Save"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingAwbOrderId(null)}
+                                className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-[9px] font-bold uppercase tracking-wider cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span>{awb || <span className="italic text-gray-400">None</span>}</span>
+                              {deliveryStatus !== "delivered" && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingAwbOrderId(order.id);
+                                    setNewAwbValue(awb || "");
+                                  }}
+                                  className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-[#4A154B]/5 hover:bg-[#4A154B]/10 text-[#4A154B] border border-[#4A154B]/15 rounded transition-all cursor-pointer"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3">
-                          {pickup ? (
+                          {isManualFulfillment ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] border border-purple-200">
+                              Manual Fulfillment ({getOrderCourierPartner(order)})
+                            </span>
+                          ) : pickup ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] border border-green-200">
                               <CheckCircle2 size={10} />
                               Scheduled (ID: {pickup.id})
@@ -1080,14 +1093,26 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                         </td>
                         <td className="py-2.5 px-3 text-right">
                           {(() => {
-                            const deliveryStatusAttr = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "delivery_status");
-                            const deliveryStatus = deliveryStatusAttr?.value || (order.tags?.includes("delivery_status:delivered") ? "delivered" : "dispatched");
-
                             if (deliveryStatus === "delivered") {
                               return <span className="text-[10px] text-green-700 font-bold uppercase">Delivered</span>;
                             }
 
-                             return (
+                            if (isManualFulfillment) {
+                              return (
+                                <div className="flex justify-end gap-2 items-center">
+                                  <button
+                                    type="button"
+                                    disabled={manualFulfilling}
+                                    onClick={() => handleMarkDeliveredSubmit(order.id)}
+                                    className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
+                                  >
+                                    Mark Delivered
+                                  </button>
+                                </div>
+                              );
+                            }
+
+                            return (
                               <div className="flex justify-end gap-2 items-center">
                                 {pickup ? (
                                   <span className="text-[10px] text-green-700 font-semibold">Assigned (ID: {pickup.id})</span>

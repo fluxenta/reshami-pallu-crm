@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import { Sparkles, Plus, Trash2, ArrowUpRight, ArrowDownRight, Activity, Calendar, FileText, IndianRupee, Loader2 } from "lucide-react";
+import { Sparkles, Plus, Trash2, ArrowUpRight, ArrowDownRight, Activity, Calendar, FileText, IndianRupee, Loader2, RefreshCw } from "lucide-react";
 
 interface Transaction {
   id: string;
@@ -13,6 +13,7 @@ interface Transaction {
   notes: string;
   createdAt: string;
   isSystem?: boolean;
+  source?: string;
 }
 
 const emptyForm = {
@@ -28,6 +29,29 @@ export default function FinancialsDashboardPage() {
   const [form, setForm] = useState(emptyForm);
   const [isSaving, setIsSaving] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  async function handleSyncRazorpay() {
+    setIsSyncing(true);
+    try {
+      const res = await fetch("/api/financials/razorpay/sync", {
+        method: "POST"
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Successfully synced ${data.syncedCount} new transaction(s) from Razorpay.`);
+        setTransactions(data.transactions || []);
+      } else {
+        const errData = await res.json();
+        alert(`Sync failed: ${errData.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      console.error("Failed to sync Razorpay:", err);
+      alert("Network error: Failed to sync Razorpay.");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
 
   async function loadTransactions() {
     try {
@@ -133,6 +157,18 @@ export default function FinancialsDashboardPage() {
                 Manage saree sourcing costs, business operating expenses, and secondary income pipelines.
               </p>
             </div>
+            <button
+              onClick={handleSyncRazorpay}
+              disabled={isSyncing}
+              className="flex items-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer border-none shadow-sm uppercase tracking-wider bg-[#4A154B] text-white hover:bg-[#3d113e] transition-colors disabled:opacity-50"
+            >
+              {isSyncing ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+              {isSyncing ? "Syncing..." : "Sync Razorpay"}
+            </button>
           </div>
 
           {/* Metric Summary Cards */}
@@ -347,7 +383,11 @@ export default function FinancialsDashboardPage() {
                               <td className="py-3.5 max-w-[240px] truncate pr-4">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span>{t.notes || <span className="italic text-[#1A1A1A]/40">No description</span>}</span>
-                                  {t.isSystem && (
+                                  {t.source === "razorpay" ? (
+                                    <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider scale-95 shrink-0">
+                                      Razorpay Sync
+                                    </span>
+                                  ) : t.isSystem && (
                                     <span className="bg-blue-50 border border-blue-100 text-blue-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider scale-95 shrink-0">
                                       Shopify Sync
                                     </span>
