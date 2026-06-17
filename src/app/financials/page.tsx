@@ -1,240 +1,243 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import { Sparkles, Plus, Trash2, ArrowUpRight, ArrowDownRight, Activity, Calendar, FileText, IndianRupee, Loader2, RefreshCw } from "lucide-react";
+import OrderDetailModal from "@/components/orders/OrderDetailModal";
+import { 
+  Sparkles, 
+  CreditCard, 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  Activity, 
+  Calendar, 
+  FileText, 
+  IndianRupee, 
+  Loader2, 
+  RefreshCw, 
+  Search, 
+  AlertCircle,
+  ChevronDown,
+  ChevronUp
+} from "lucide-react";
 
-interface Transaction {
+interface Payment {
   id: string;
-  type: "cost" | "expense" | "side_income";
   amount: number;
-  date: string;
-  notes: string;
+  fee: number;
+  tax: number;
+  status: string;
+  method: string;
+  email: string;
+  contact: string;
   createdAt: string;
-  isSystem?: boolean;
-  source?: string;
+  orderId: string;
+  description: string;
+  shopifyOrderName: string | null;
+  shopifyOrder?: any;
 }
 
-const emptyForm = {
-  type: "expense" as "cost" | "expense" | "side_income",
-  amount: "",
-  date: new Date().toISOString().split("T")[0],
-  notes: ""
-};
+interface Summary {
+  totalCaptured: number;
+  totalFees: number;
+  totalRefunded: number;
+  totalFailed: number;
+}
 
-export default function FinancialsDashboardPage() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [form, setForm] = useState(emptyForm);
-  const [isSaving, setIsSaving] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-
-  async function handleSyncRazorpay() {
-    setIsSyncing(true);
-    try {
-      const res = await fetch("/api/financials/razorpay/sync", {
-        method: "POST"
-      });
-      if (res.ok) {
-        const data = await res.json();
-        alert(`Successfully synced ${data.syncedCount} new transaction(s) from Razorpay.`);
-        setTransactions(data.transactions || []);
-      } else {
-        const errData = await res.json();
-        alert(`Sync failed: ${errData.error || "Unknown error"}`);
-      }
-    } catch (err) {
-      console.error("Failed to sync Razorpay:", err);
-      alert("Network error: Failed to sync Razorpay.");
-    } finally {
-      setIsSyncing(false);
+function getEstimatedSettlementDate(createdAtStr: string): string {
+  const date = new Date(createdAtStr);
+  let daysAdded = 0;
+  while (daysAdded < 2) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) { // Skip Saturday (6) and Sunday (0)
+      daysAdded++;
     }
   }
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
 
-  async function loadTransactions() {
+function getEstimatedFeeAndTax(amount: number, method: string): number {
+  let percentage = 0.02; // Standard 2%
+  const methodLower = (method || "").toLowerCase();
+  if (
+    methodLower.includes("emi") ||
+    methodLower.includes("international") ||
+    methodLower.includes("diners") ||
+    methodLower.includes("amex")
+  ) {
+    percentage = 0.03; // 3% for EMI/Amex/International
+  }
+  const fee = amount * percentage;
+  const tax = fee * 0.18; // 18% GST on the fee
+  return fee + tax;
+}
+
+export default function RazorpayFinancialsPage() {
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [summary, setSummary] = useState<Summary>({
+    totalCaptured: 0,
+    totalFees: 0,
+    totalRefunded: 0,
+    totalFailed: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFailedCollapsed, setIsFailedCollapsed] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [metaMap, setMetaMap] = useState<Record<string, any>>({});
+
+  async function loadRazorpayData() {
     try {
-      const res = await fetch("/api/financials");
+      const res = await fetch("/api/financials/razorpay");
       if (res.ok) {
         const data = await res.json();
-        setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
+        setPayments(data.payments || []);
+        if (data.summary) {
+          setSummary(data.summary);
+        }
+        if (data.metaMap) {
+          setMetaMap(data.metaMap);
+        }
       }
     } catch (err) {
-      console.error("Failed to load transactions", err);
+      console.error("Failed to load Razorpay transaction history:", err);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }
 
   useEffect(() => {
-    loadTransactions();
+    loadRazorpayData();
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.amount || Number(form.amount) <= 0) return;
-    
-    setIsSaving(true);
-    try {
-      const res = await fetch("/api/financials", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTransactions(data.transactions || []);
-        setForm({
-          ...emptyForm,
-          date: new Date().toISOString().split("T")[0]
-        });
-        alert("Transaction added successfully!");
-      }
-    } catch (err) {
-      console.error("Failed to save transaction", err);
-    } finally {
-      setIsSaving(false);
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    loadRazorpayData();
+  };
+
+  const filteredPayments = payments.filter((p) => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return true;
+    return (
+      p.id.toLowerCase().includes(query) ||
+      p.orderId.toLowerCase().includes(query) ||
+      (p.shopifyOrderName && p.shopifyOrderName.toLowerCase().includes(query)) ||
+      p.email.toLowerCase().includes(query) ||
+      p.contact.toLowerCase().includes(query) ||
+      p.status.toLowerCase().includes(query) ||
+      p.method.toLowerCase().includes(query)
+    );
+  });
+
+  const getStatusBadgeStyle = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "captured":
+        return "bg-green-50 text-green-700 border border-green-200";
+      case "failed":
+        return "bg-red-50 text-red-700 border border-red-200";
+      case "refunded":
+        return "bg-amber-50 text-amber-700 border border-amber-200";
+      case "authorized":
+        return "bg-blue-50 text-blue-700 border border-blue-200";
+      default:
+        return "bg-gray-50 text-gray-700 border border-gray-200";
     }
-  }
+  };
 
-  async function handleDelete(id: string) {
-    if (!confirm("Are you sure you want to delete this entry?")) return;
-    setActionLoading(id);
-    try {
-      const res = await fetch("/api/financials", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete", id })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTransactions(data.transactions || []);
-      }
-    } catch (err) {
-      console.error("Failed to delete transaction", err);
-    } finally {
-      setActionLoading(null);
-    }
-  }
+  const formatDateTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
-  // P&L Calculations
-  const totalCost = transactions
-    .filter(t => t.type === "cost")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalExpense = transactions
-    .filter(t => t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalSideIncome = transactions
-    .filter(t => t.type === "side_income")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalOutflow = totalCost + totalExpense;
-  const netProfitLoss = totalSideIncome - totalOutflow;
-
-  const inputCls =
-    "h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm outline-none transition focus:border-[#4A154B] focus:ring-2 focus:ring-[#4A154B]/10";
+  const capturedOrRefundedPayments = payments.filter(p => p.status === "captured" || p.status === "refunded");
+  const computedTotalFees = capturedOrRefundedPayments.reduce((acc, p) => {
+    return acc + (p.fee > 0 ? p.fee : getEstimatedFeeAndTax(p.amount, p.method));
+  }, 0);
+  const computedNet = summary.totalCaptured - computedTotalFees - summary.totalRefunded;
+  const hasEstimatedFees = capturedOrRefundedPayments.some(p => p.fee === 0);
 
   return (
     <div className="flex min-h-screen bg-[#FAF8F5]">
       <Sidebar />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Financial Ledger" />
+        <Header title="Razorpay Financials" />
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-[1100px] mx-auto w-full space-y-6 sm:space-y-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-[1200px] mx-auto w-full space-y-6 sm:space-y-8">
           
-          {/* Header Banner */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/40 border border-[#4A154B]/10 rounded-2xl p-4 sm:p-6 backdrop-blur-md">
-            <div>
-              <h3 className="font-display font-bold text-base sm:text-lg text-[#4A154B] flex items-center gap-2">
-                <Sparkles size={18} className="text-[#D4AF37]" />
-                Proprietor Financial Dashboard
-              </h3>
-              <p className="text-xs text-[#1A1A1A]/60 mt-0.5">
-                Manage saree sourcing costs, business operating expenses, and secondary income pipelines.
-              </p>
-            </div>
-            <button
-              onClick={handleSyncRazorpay}
-              disabled={isSyncing}
-              className="flex items-center gap-2 py-2.5 px-4 rounded-xl text-xs font-semibold cursor-pointer border-none shadow-sm uppercase tracking-wider bg-[#4A154B] text-white hover:bg-[#3d113e] transition-colors disabled:opacity-50"
-            >
-              {isSyncing ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <RefreshCw size={14} />
-              )}
-              {isSyncing ? "Syncing..." : "Sync Razorpay"}
-            </button>
-          </div>
-
-          {/* Metric Summary Cards */}
+          {/* Metrics Overview Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             
-            {/* Saree sourcing costs */}
-            <div className="ui-card p-5 relative overflow-hidden bg-white/80">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-600">
-                  <ArrowDownRight size={18} />
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">Sourcing Costs</span>
-                  <h4 className="text-xl font-display font-bold text-[#4A154B] mt-0.5">
-                    ₹{totalCost.toLocaleString("en-IN")}
-                  </h4>
-                </div>
-              </div>
-            </div>
-
-            {/* Operating expenses */}
-            <div className="ui-card p-5 relative overflow-hidden bg-white/80">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center text-red-600">
-                  <ArrowDownRight size={18} />
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">Expenses</span>
-                  <h4 className="text-xl font-display font-bold text-[#4A154B] mt-0.5">
-                    ₹{totalExpense.toLocaleString("en-IN")}
-                  </h4>
-                </div>
-              </div>
-            </div>
-
-            {/* Side income */}
-            <div className="ui-card p-5 relative overflow-hidden bg-white/80">
+            {/* Total collections */}
+            <div className="ui-card p-5 relative overflow-hidden bg-white/85">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-green-50 border border-green-100 flex items-center justify-center text-green-600">
                   <ArrowUpRight size={18} />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">Side Income</span>
+                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">Gross Collected</span>
                   <h4 className="text-xl font-display font-bold text-[#4A154B] mt-0.5">
-                    ₹{totalSideIncome.toLocaleString("en-IN")}
+                    ₹{summary.totalCaptured.toLocaleString("en-IN")}
                   </h4>
                 </div>
               </div>
             </div>
 
-            {/* Net P&L */}
-            <div className={`ui-card p-5 relative overflow-hidden ${
-              netProfitLoss >= 0 ? "bg-green-50/50 border-green-200" : "bg-red-50/50 border-red-200"
-            }`}>
+            {/* Gateway Fees */}
+            <div className="ui-card p-5 relative overflow-hidden bg-white/85">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                  netProfitLoss >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                }`}>
+                <div className="w-10 h-10 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center text-red-600">
+                  <ArrowDownRight size={18} />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">Fees & Tax</span>
+                  <h4 className="text-xl font-display font-bold text-[#4A154B] mt-0.5 flex items-end gap-1.5">
+                    ₹{computedTotalFees.toLocaleString("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
+                    {hasEstimatedFees && <span className="text-[10px] font-normal text-amber-600 mb-1" title="Includes estimated pending fees">(Est.)</span>}
+                  </h4>
+                </div>
+              </div>
+            </div>
+
+            {/* Refunds */}
+            <div className="ui-card p-5 relative overflow-hidden bg-white/85">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+                  <RefreshCw size={16} />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">Total Refunded</span>
+                  <h4 className="text-xl font-display font-bold text-[#4A154B] mt-0.5">
+                    ₹{summary.totalRefunded.toLocaleString("en-IN")}
+                  </h4>
+                </div>
+              </div>
+            </div>
+
+            {/* Net Collections */}
+            <div className="ui-card p-5 relative overflow-hidden bg-purple-50/50 border-purple-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
                   <Activity size={18} />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">Net Profit / Loss</span>
-                  <h4 className={`text-xl font-display font-bold mt-0.5 ${
-                    netProfitLoss >= 0 ? "text-green-700" : "text-red-700"
-                  }`}>
-                    ₹{netProfitLoss.toLocaleString("en-IN")}
+                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">Net Settlements</span>
+                  <h4 className="text-xl font-display font-bold text-[#4A154B] mt-0.5 flex items-end gap-1.5">
+                    ₹{computedNet.toLocaleString("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
+                    {hasEstimatedFees && <span className="text-[10px] font-normal text-amber-600 mb-1" title="Includes estimated pending fees">(Est.)</span>}
                   </h4>
                 </div>
               </div>
@@ -242,195 +245,223 @@ export default function FinancialsDashboardPage() {
 
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Main Content Box */}
+          <div className="bg-white rounded-2xl border border-[#4A154B]/8 shadow-sm overflow-hidden space-y-4 p-5 sm:p-6">
             
-            {/* Left: Add New entry */}
-            <div className="lg:col-span-4 space-y-6">
-              <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-[#4A154B]/8 shadow-sm p-5 sm:p-6 space-y-5">
-                <div className="flex items-center gap-2 pb-3 border-b border-[#4A154B]/8">
-                  <Plus size={16} className="text-[#4A154B]" />
-                  <span className="font-bold text-sm text-[#4A154B] uppercase tracking-wider">Add Transaction</span>
+            {/* Search and Table header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-[#1A1A1A]/80 uppercase tracking-widest">
+                  Payment History
+                </span>
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="relative w-full sm:w-64">
+                  <input
+                    type="text"
+                    placeholder="Search orders, phone..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full h-9 pl-9 pr-4 rounded-full border border-[#1A1A1A]/10 bg-[#FAF8F5]/50 text-xs outline-none focus:border-[#4A154B]/30 focus:ring-1 focus:ring-[#4A154B]/10 transition-all text-[#1A1A1A]/80"
+                  />
+                  <Search size={14} className="absolute left-3.5 top-2.5 text-[#1A1A1A]/40" />
                 </div>
-
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#4A154B]/70">Transaction Type</label>
-                    <select
-                      value={form.type}
-                      onChange={(e) => setForm(f => ({ ...f, type: e.target.value as any }))}
-                      className={inputCls}
-                    >
-                      <option value="expense">Operating Expense</option>
-                      <option value="cost">Saree Sourcing Cost</option>
-                      <option value="side_income">Secondary Side Income</option>
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#4A154B]/70">Amount (₹)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="e.g. 5000"
-                      value={form.amount}
-                      onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
-                      className={inputCls}
-                      required
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#4A154B]/70">Date</label>
-                    <input
-                      type="date"
-                      value={form.date}
-                      onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))}
-                      className={inputCls}
-                      required
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#4A154B]/70">Description / Notes</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Courier charges, Banaras travel"
-                      value={form.notes}
-                      onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="btn-primary w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl uppercase tracking-wider text-xs font-semibold cursor-pointer border-none shadow-md"
-                  >
-                    {isSaving ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Plus size={14} />
-                    )}
-                    {isSaving ? "Saving..." : "Add Entry"}
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Right: Ledger lists */}
-            <div className="lg:col-span-8 space-y-6">
-              <div className="bg-white rounded-2xl border border-[#4A154B]/8 shadow-sm overflow-hidden">
-                <div className="flex items-center gap-2 px-5 py-4 border-b border-[#4A154B]/8">
-                  <FileText size={16} className="text-[#4A154B]" />
-                  <span className="font-bold text-sm text-[#4A154B] uppercase tracking-wider">
-                    Recent Transactions
-                  </span>
-                  <span className="ml-auto text-xs text-[#1A1A1A]/45 font-medium">
-                    {transactions.length} entries recorded
-                  </span>
-                </div>
-
-                {isLoading ? (
-                  <div className="p-10 text-center space-y-3">
-                    <Loader2 className="animate-spin text-[#4A154B] mx-auto" size={24} />
-                    <p className="text-xs text-[#1A1A1A]/55">Loading transaction history...</p>
-                  </div>
-                ) : transactions.length === 0 ? (
-                  <div className="p-10 text-center">
-                    <IndianRupee size={36} className="text-[#4A154B]/20 mx-auto mb-3" />
-                    <p className="text-sm text-[#1A1A1A]/50">No transactions recorded yet.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-[#4A154B]/10 text-[10px] uppercase tracking-wider text-[#1A1A1A]/50 font-bold px-5 bg-[#FAF8F5]/50">
-                          <th className="py-3 pl-5">Date</th>
-                          <th className="py-3">Type</th>
-                          <th className="py-3">Details / Notes</th>
-                          <th className="py-3 text-right pr-5">Amount</th>
-                          <th className="py-3 text-center w-12">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#4A154B]/5 text-xs text-[#1A1A1A]/80">
-                        {transactions.map((t) => {
-                          const isDeleting = actionLoading === t.id;
-                          return (
-                            <tr key={t.id} className="hover:bg-[#4A154B]/3 transition-colors duration-200">
-                              <td className="py-3.5 pl-5 font-medium whitespace-nowrap">
-                                <span className="flex items-center gap-1.5">
-                                  <Calendar size={12} className="text-[#1A1A1A]/40" />
-                                  {new Date(t.date).toLocaleDateString("en-IN", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    year: "numeric"
-                                  })}
-                                </span>
-                              </td>
-                              <td className="py-3.5">
-                                <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wider ${
-                                  t.type === "cost"
-                                    ? "bg-orange-50 text-orange-700 border border-orange-100"
-                                    : t.type === "expense"
-                                    ? "bg-red-50 text-red-700 border border-red-100"
-                                    : "bg-green-50 text-green-700 border border-green-100"
-                                }`}>
-                                  {t.type === "cost" ? "Cost" : t.type === "expense" ? "Expense" : "Income"}
-                                </span>
-                              </td>
-                              <td className="py-3.5 max-w-[240px] truncate pr-4">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span>{t.notes || <span className="italic text-[#1A1A1A]/40">No description</span>}</span>
-                                  {t.source === "razorpay" ? (
-                                    <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider scale-95 shrink-0">
-                                      Razorpay Sync
-                                    </span>
-                                  ) : t.isSystem && (
-                                    <span className="bg-blue-50 border border-blue-100 text-blue-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider scale-95 shrink-0">
-                                      Shopify Sync
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className={`py-3.5 text-right font-semibold pr-5 text-sm ${
-                                t.type === "side_income" ? "text-green-700" : "text-red-700"
-                              }`}>
-                                {t.type === "side_income" ? "+" : "-"} ₹{t.amount.toLocaleString("en-IN")}
-                              </td>
-                              <td className="py-3.5 text-center pr-5">
-                                {!t.isSystem ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDelete(t.id)}
-                                    disabled={isDeleting}
-                                    title="Delete transaction"
-                                    className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center transition border-none bg-transparent cursor-pointer disabled:opacity-40"
-                                  >
-                                    {isDeleting ? (
-                                      <Loader2 size={14} className="animate-spin text-red-400" />
-                                    ) : (
-                                      <Trash2 size={14} className="text-red-500 hover:text-red-700" />
-                                    )}
-                                  </button>
-                                ) : (
-                                  <span className="text-[10px] text-blue-500 font-bold uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded border border-blue-200/50">Auto</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                <button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing || isLoading}
+                  className="p-2 rounded-full text-[#1A1A1A]/40 hover:bg-[#1A1A1A]/5 hover:text-[#1A1A1A]/80 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Refresh Data"
+                >
+                  <RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />
+                </button>
               </div>
             </div>
 
-          </div>
+            {/* Payments Table */}
+            {isLoading ? (
+              <div className="p-16 text-center space-y-3">
+                <Loader2 className="animate-spin text-[#4A154B] mx-auto" size={28} />
+                <p className="text-xs text-[#1A1A1A]/55">Fetching transaction feed from Razorpay API...</p>
+              </div>
+            ) : (() => {
+              const capturedPayments = filteredPayments.filter(p => p.status === "captured" || p.status === "refunded");
+              const failedPayments = filteredPayments.filter(p => p.status === "failed");
 
+              return (
+                <div className="space-y-6">
+                  {/* Main Captured Payments Table */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-green-700 tracking-wider block px-1">
+                      Successful Collections ({capturedPayments.length})
+                    </span>
+                    {capturedPayments.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-[#1A1A1A]/50 bg-[#FAF8F5] rounded-xl border border-dashed border-[#1A1A1A]/10">
+                        No captured transactions found matching search.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-[#1A1A1A]/5 text-[10px] uppercase tracking-widest text-[#1A1A1A]/40 font-semibold">
+                              <th className="py-4 px-4 font-medium text-left">Order</th>
+                              <th className="py-4 px-4 font-medium text-left">Time</th>
+                              <th className="py-4 px-4 font-medium text-center">Method</th>
+                              <th className="py-4 px-4 font-medium text-left">Est. Settlement</th>
+                              <th className="py-4 px-4 font-medium text-right">Fee</th>
+                              <th className="py-4 px-4 font-medium text-center">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-[#1A1A1A]/80">
+                            {capturedPayments.map((p) => (
+                              <tr key={p.id} className="hover:bg-[#1A1A1A]/[0.02] transition-colors border-b border-[#1A1A1A]/[0.02] last:border-none group">
+                                <td className="py-4 px-4">
+                                  {p.shopifyOrderName ? (
+                                    <button 
+                                      onClick={() => {
+                                        if (p.shopifyOrder) {
+                                          setSelectedOrder(p.shopifyOrder);
+                                        } else {
+                                          alert("Order details not loaded yet.");
+                                        }
+                                      }}
+                                      className="inline-block text-[#4A154B] font-bold text-[11px] uppercase underline underline-offset-4 decoration-[#4A154B]/30 hover:decoration-[#4A154B] hover:text-[#D4AF37] transition-all cursor-pointer"
+                                    >
+                                      {p.shopifyOrderName}
+                                    </button>
+                                  ) : (
+                                    <span className="text-[#1A1A1A]/30 italic font-normal">Unmapped</span>
+                                  )}
+                                </td>
+                                <td className="py-4 px-4 whitespace-nowrap">
+                                  <span className="text-[#1A1A1A]/60">
+                                    {formatDateTime(p.createdAt)}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4 text-center uppercase text-[10px] text-[#1A1A1A]/50 tracking-widest">
+                                  {p.method}
+                                </td>
+                                <td className="py-4 px-4 font-medium text-[#1A1A1A]/60 whitespace-nowrap">
+                                  {getEstimatedSettlementDate(p.createdAt)}
+                                </td>
+                                <td className="py-4 px-4 text-right text-[#1A1A1A]/50">
+                                  {p.fee > 0 ? (
+                                    `₹${p.fee.toFixed(2)}`
+                                  ) : (
+                                    <span className="text-amber-600/80 italic text-[11px]" title="Estimated based on method">
+                                      ₹{getEstimatedFeeAndTax(p.amount, p.method).toFixed(2)} (Est.)
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-4 px-4 text-center font-medium text-[13px] text-[#1A1A1A]/90">
+                                  ₹{p.amount.toLocaleString("en-IN")}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Collapsible Failed Payments Table */}
+                  <div className="border-t border-[#4A154B]/10 pt-4 space-y-2">
+                    <button
+                      onClick={() => setIsFailedCollapsed(!isFailedCollapsed)}
+                      className="flex items-center justify-between w-full p-3 bg-red-50/40 border border-red-150/40 rounded-xl text-left hover:bg-red-50/70 transition-colors cursor-pointer"
+                    >
+                      <span className="text-[10px] uppercase font-bold text-red-700 tracking-wider flex items-center gap-1.5">
+                        <AlertCircle size={12} />
+                        Failed Transactions ({failedPayments.length})
+                      </span>
+                      {isFailedCollapsed ? (
+                        <ChevronDown size={16} className="text-red-700" />
+                      ) : (
+                        <ChevronUp size={16} className="text-red-700" />
+                      )}
+                    </button>
+
+                    {!isFailedCollapsed && (
+                      <div className="mt-2">
+                        {failedPayments.length === 0 ? (
+                          <div className="p-8 text-center text-xs text-[#1A1A1A]/50 bg-[#FAF8F5] rounded-xl border border-dashed border-[#1A1A1A]/10">
+                            No failed transactions found matching search.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto border border-red-150/20 rounded-xl">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="border-b border-[#1A1A1A]/5 text-[10px] uppercase tracking-widest text-[#1A1A1A]/40 font-semibold">
+                                  <th className="py-4 px-4 font-medium text-left">Order</th>
+                                  <th className="py-4 px-4 font-medium text-left">Time</th>
+                                  <th className="py-4 px-4 font-medium text-center">Method</th>
+                                  <th className="py-4 px-4 font-medium text-right">Fee</th>
+                                  <th className="py-4 px-4 font-medium text-center">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="text-red-900/90">
+                                {failedPayments.map((p) => (
+                                  <tr key={p.id} className="hover:bg-red-50/20 transition-colors border-b border-[#1A1A1A]/[0.02] last:border-none group">
+                                    <td className="py-4 px-4">
+                                      {p.shopifyOrderName ? (
+                                        <button 
+                                          onClick={() => {
+                                            if (p.shopifyOrder) {
+                                              setSelectedOrder(p.shopifyOrder);
+                                            } else {
+                                              alert("Order details not loaded yet.");
+                                            }
+                                          }}
+                                          className="inline-block text-red-700 font-bold text-[11px] uppercase underline underline-offset-4 decoration-red-700/30 hover:decoration-red-700 hover:text-red-900 transition-all cursor-pointer"
+                                        >
+                                          {p.shopifyOrderName}
+                                        </button>
+                                      ) : (
+                                        <span className="text-red-700/40 italic font-normal">Unmapped</span>
+                                      )}
+                                    </td>
+                                    <td className="py-4 px-4 whitespace-nowrap">
+                                      <span className="text-red-900/60">
+                                        {formatDateTime(p.createdAt)}
+                                      </span>
+                                    </td>
+                                    <td className="py-4 px-4 text-center uppercase text-[10px] tracking-widest text-red-700/60">
+                                      {p.method}
+                                    </td>
+                                    <td className="py-4 px-4 text-right text-red-900/60">
+                                      {p.fee > 0 ? (
+                                        `₹${p.fee.toFixed(2)}`
+                                      ) : (
+                                        <span className="text-red-700/60 italic text-[11px]" title="Estimated based on method">
+                                          ₹{getEstimatedFeeAndTax(p.amount, p.method).toFixed(2)} (Est.)
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-4 px-4 text-center font-medium text-[13px] text-red-700">
+                                      ₹{p.amount.toLocaleString("en-IN")}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         </main>
+        
+        {/* Render OrderDetailModal if an order is selected */}
+        {selectedOrder && (
+          <OrderDetailModal
+            order={selectedOrder}
+            metaMap={metaMap}
+            onClose={() => setSelectedOrder(null)}
+          />
+        )}
       </div>
     </div>
   );

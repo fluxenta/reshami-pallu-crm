@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { 
   Search, 
   Eye, 
@@ -19,7 +20,20 @@ interface OrdersListTableProps {
   metaMap: Record<string, { costPrice: number; margin: number; privateNotes?: string }>;
 }
 
-export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTableProps) {
+export default function OrdersListTable(props: OrdersListTableProps) {
+  return (
+    <Suspense fallback={
+      <div className="p-12 text-center text-[#1A1A1A]/40 font-medium">
+        <Package size={32} className="mx-auto mb-2 opacity-30 animate-spin" />
+        Loading orders...
+      </div>
+    }>
+      <OrdersListTableContent {...props} />
+    </Suspense>
+  );
+}
+
+function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
@@ -37,6 +51,23 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
   // Bulk Processing States
   const [selectedUnfulfilled, setSelectedUnfulfilled] = useState<Record<string, boolean>>({});
   const [orderDimensions, setOrderDimensions] = useState<Record<string, { weightGrams: string, length: string, width: string, height: string }>>({});
+
+  const searchParams = useSearchParams();
+  const orderNameParam = searchParams.get("name");
+  const orderIdParam = searchParams.get("id");
+
+  useEffect(() => {
+    if (orderNameParam || orderIdParam) {
+      const found = initialOrders.find(
+        (o) =>
+          (orderNameParam && o.name === orderNameParam) ||
+          (orderIdParam && o.id === orderIdParam)
+      );
+      if (found) {
+        setSelectedOrder(found);
+      }
+    }
+  }, [orderNameParam, orderIdParam, initialOrders]);
 
   useEffect(() => {
     async function loadSlots() {
@@ -316,6 +347,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
 
   const [editingAwbOrderId, setEditingAwbOrderId] = useState<string | null>(null);
   const [newAwbValue, setNewAwbValue] = useState("");
+  const [editingCourier, setEditingCourier] = useState("");
   const [updatingAwb, setUpdatingAwb] = useState(false);
 
   const getOrderCourierPartner = (order: any) => {
@@ -541,7 +573,12 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                             />
                           </td>
                           {/* Order ID */}
-                          <td className="py-3 px-4 font-bold text-[#4A154B]">{o.name}</td>
+                          <td 
+                            className="py-3 px-4 font-bold text-[#4A154B] hover:text-[#D4AF37] cursor-pointer transition-colors"
+                            onClick={() => setSelectedOrder(o)}
+                          >
+                            {o.name}
+                          </td>
                           {/* Customer */}
                           <td className="py-3 px-4">
                             <div>
@@ -679,7 +716,12 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                             onChange={() => handleToggleUnfulfilled(o.id)}
                             className="w-4 h-4 rounded text-[#4A154B] border-[#4A154B]/10 cursor-pointer"
                           />
-                          <span className="font-bold text-[#4A154B]">{o.name}</span>
+                          <span 
+                            className="font-bold text-[#4A154B] hover:text-[#D4AF37] cursor-pointer transition-colors"
+                            onClick={() => setSelectedOrder(o)}
+                          >
+                            {o.name}
+                          </span>
                         </div>
                         <span className="text-[10px] font-bold uppercase text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                           Awaiting Dispatch
@@ -926,7 +968,27 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                     Date/Slot: <strong className="text-green-900">{pickup.date}</strong> ({pickup.time === "10:00:00" ? "Morning Slot (10 AM - 1 PM)" : "Afternoon Slot (2 PM - 5 PM)"})
                   </p>
                   <p className="text-[10px] text-green-800/80">
-                    Manifested Packages Linked: <strong className="text-green-900">{pickup.ordersCount} ({pickup.orders.join(", ")})</strong>
+                    Manifested Packages Linked: <strong className="text-green-900">{pickup.ordersCount} (
+                      {pickup.orders.map((orderName: string, idx: number) => {
+                        const matchedOrder = initialOrders.find(o => o.name === orderName);
+                        return (
+                          <span key={orderName}>
+                            {idx > 0 && ", "}
+                            {matchedOrder ? (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedOrder(matchedOrder)}
+                                className="underline hover:text-green-700 font-bold focus:outline-none cursor-pointer inline bg-transparent border-none p-0 text-inherit"
+                              >
+                                {orderName}
+                              </button>
+                            ) : (
+                              <span>{orderName}</span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    )</strong>
                   </p>
                   <div className="mt-2 p-1.5 bg-amber-50 text-amber-900 rounded-lg border border-amber-200 text-[10px] leading-relaxed">
                     📌 <strong>Pack before:</strong> {pickup.time === "10:00:00" ? "09:30 AM" : "01:30 PM"} on {pickup.date}.
@@ -1030,31 +1092,61 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
 
                     return (
                       <tr key={order.id} className="hover:bg-[#FAF8F5]/30">
-                        <td className="py-2.5 px-3 font-bold text-[#4A154B]">{order.name}</td>
+                        <td 
+                          className="py-2.5 px-3 font-bold text-[#4A154B] hover:text-[#D4AF37] cursor-pointer transition-colors"
+                          onClick={() => setSelectedOrder(order)}
+                        >
+                          {order.name}
+                        </td>
                         <td className="py-2.5 px-3 font-mono text-[#1A1A1A]/70">
                           {editingAwbOrderId === order.id ? (
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex flex-col gap-1.5 bg-[#FAF8F5] p-2 rounded-lg border border-[#4A154B]/10 w-64">
+                              <div className="flex items-center justify-between text-[9px] uppercase font-bold text-[#4A154B]/60">
+                                <span>Courier & AWB</span>
+                              </div>
+                              <select
+                                value={editingCourier}
+                                onChange={(e) => setEditingCourier(e.target.value)}
+                                className="h-7 w-full px-1.5 border border-[#4A154B]/20 rounded text-[11px] outline-none bg-white font-sans cursor-pointer"
+                              >
+                                <option value="Delhivery">Delhivery</option>
+                                <option value="Shiprocket">Shiprocket</option>
+                                <option value="Bluedart">Bluedart</option>
+                                <option value="DTDC">DTDC</option>
+                                <option value="India Post">India Post</option>
+                                <option value="Professional Couriers">Professional Couriers</option>
+                                <option value="Ekart Logistics">Ekart Logistics</option>
+                                <option value="Shadowfax">Shadowfax</option>
+                                <option value="Xpressbees">Xpressbees</option>
+                                <option value="SafeExpress">SafeExpress</option>
+                                <option value="Trackon">Trackon</option>
+                                <option value="Anjani">Anjani</option>
+                                <option value="Shree Maruti Courier">Shree Maruti Courier</option>
+                              </select>
                               <input
                                 type="text"
                                 value={newAwbValue}
                                 onChange={(e) => setNewAwbValue(e.target.value)}
-                                className="h-7 px-1.5 border border-[#4A154B]/20 rounded text-xs outline-none bg-white font-mono w-28"
+                                placeholder="Enter AWB"
+                                className="h-7 w-full px-1.5 border border-[#4A154B]/20 rounded text-xs outline-none bg-white font-mono"
                               />
-                              <button
-                                type="button"
-                                disabled={updatingAwb || !newAwbValue.trim()}
-                                onClick={() => handleUpdateAwb(order.id, getOrderCourierPartner(order))}
-                                className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer"
-                              >
-                                {updatingAwb ? "..." : "Save"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingAwbOrderId(null)}
-                                className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-[9px] font-bold uppercase tracking-wider cursor-pointer"
-                              >
-                                Cancel
-                              </button>
+                              <div className="flex gap-1.5 justify-end">
+                                <button
+                                  type="button"
+                                  disabled={updatingAwb || !newAwbValue.trim()}
+                                  onClick={() => handleUpdateAwb(order.id, editingCourier)}
+                                  className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer"
+                                >
+                                  {updatingAwb ? "..." : "Save"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingAwbOrderId(null)}
+                                  className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-[9px] font-bold uppercase tracking-wider cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
@@ -1065,6 +1157,7 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
                                   onClick={() => {
                                     setEditingAwbOrderId(order.id);
                                     setNewAwbValue(awb || "");
+                                    setEditingCourier(getOrderCourierPartner(order));
                                   }}
                                   className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-[#4A154B]/5 hover:bg-[#4A154B]/10 text-[#4A154B] border border-[#4A154B]/15 rounded transition-all cursor-pointer"
                                 >
@@ -1382,7 +1475,13 @@ export default function OrdersListTable({ initialOrders, metaMap }: OrdersListTa
         <OrderDetailModal
           order={selectedOrder}
           metaMap={metaMap}
-          onClose={() => setSelectedOrder(null)}
+          onClose={() => {
+            setSelectedOrder(null);
+            const params = new URLSearchParams(window.location.search);
+            if (params.has("name") || params.has("id")) {
+              window.history.replaceState({}, "", window.location.pathname);
+            }
+          }}
         />
       )}
 

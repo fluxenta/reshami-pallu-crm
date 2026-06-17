@@ -47,14 +47,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Customer Orders", href: "/orders", icon: Package },
       { label: "Active Discounts", href: "/discounts", icon: Sparkles },
-      { label: "Founder's Story", href: "/founder-story", icon: UserRound },
-      { label: "Store Customizer", href: "/customizer", icon: Palette },
+      { label: "Financial Analysis", href: "/financials", icon: ScrollText },
     ]
   },
   {
     groupLabel: "Operations & Insights",
     items: [
-      { label: "Financial Analysis", href: "/financials", icon: ScrollText },
+      { label: "Founder's Story", href: "/founder-story", icon: UserRound },
+      { label: "Store Customizer", href: "/customizer", icon: Palette },
       { label: "Shopify Store Policies", href: "/policies", icon: ShieldCheck },
       { label: "Operations Manual", href: "/manual", icon: BookOpen },
     ]

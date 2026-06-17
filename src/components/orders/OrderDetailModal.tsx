@@ -37,6 +37,19 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
   const initialDeliveryStatus = deliveryStatusAttr ? deliveryStatusAttr.value : (order.tags?.includes("delivery_status:delivered") ? "delivered" : "dispatched");
   const [currentDeliveryStatus, setCurrentDeliveryStatus] = useState(initialDeliveryStatus);
   const [markingDelivered, setMarkingDelivered] = useState(false);
+  const isManualFulfillment = order.customAttributes?.some((attr: any) => attr.key.toLowerCase() === "courier_partner") || order.tags?.some((t: string) => t.toLowerCase().startsWith("courier:"));
+
+  const getOrderCourierPartner = (order: any) => {
+    const courierAttr = order.customAttributes?.find(
+      (attr: any) => attr.key.toLowerCase() === "courier_partner"
+    );
+    if (courierAttr?.value) return courierAttr.value;
+
+    const courierTag = order.tags?.find((tag: string) => tag.toLowerCase().startsWith("courier:"));
+    if (courierTag) return courierTag.split(":")[1]?.trim();
+
+    return "Delhivery";
+  };
 
   const handleMarkDelivered = async () => {
     setMarkingDelivered(true);
@@ -104,7 +117,7 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
     setLoadingTracking(true);
     setTrackingError(null);
     try {
-      const res = await fetch(`/api/orders/track?awb=${encodeURIComponent(awb)}`);
+      const res = await fetch(`/api/orders/track?awb=${encodeURIComponent(awb)}&courier=${encodeURIComponent(getOrderCourierPartner(order))}`);
       if (res.ok) {
         const data = await res.json();
         setTracking(data.tracking);
@@ -293,7 +306,7 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
               </h3>
               {order.shippingAddress ? (
                 <div className="mt-3 text-xs space-y-1 text-[#1A1A1A]/80 leading-relaxed">
-                  <p className="font-semibold">{order.shippingAddress.fullName}</p>
+                  <p className="font-semibold">{[order.shippingAddress.firstName, order.shippingAddress.lastName].filter(Boolean).join(" ") || "Customer"}</p>
                   <p>{order.shippingAddress.address1}</p>
                   {order.shippingAddress.address2 && <p>{order.shippingAddress.address2}</p>}
                   <p>{order.shippingAddress.city}, {order.shippingAddress.province} - {order.shippingAddress.zip}</p>
@@ -406,16 +419,21 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                 
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[11px] font-bold text-[#4A154B] bg-[#4A154B]/5 px-1.5 py-0.5 rounded">
+                    Courier: {getOrderCourierPartner(order)}
+                  </span>
+                  <span className="font-mono text-[11px] font-bold text-[#4A154B] bg-[#4A154B]/5 px-1.5 py-0.5 rounded">
                     AWB: {awb}
                   </span>
-                  <a
-                    href={`/api/orders/packing-slip?awb=${awb}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#4A154B] hover:bg-[#4A154B]/95 px-2.5 py-1.5 rounded-md transition-all no-underline"
-                  >
-                    Download Label
-                  </a>
+                  {!isManualFulfillment && (
+                    <a
+                      href={`/api/orders/packing-slip?awb=${awb}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#4A154B] hover:bg-[#4A154B]/95 px-2.5 py-1.5 rounded-md transition-all no-underline"
+                    >
+                      Download Label
+                    </a>
+                  )}
                   <button 
                     type="button" 
                     onClick={fetchTrackingData}
