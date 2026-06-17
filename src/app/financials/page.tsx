@@ -169,6 +169,26 @@ export default function RazorpayFinancialsPage() {
   const computedNet = summary.totalCaptured - computedTotalFees - summary.totalRefunded;
   const hasEstimatedFees = capturedOrRefundedPayments.some(p => p.fee === 0);
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const upcomingSettlements = payments
+    .filter(p => p.status === "captured")
+    .reduce((acc, p) => {
+      const settleStr = getEstimatedSettlementDate(p.createdAt);
+      const settleDate = new Date(settleStr);
+      if (settleDate >= today) {
+        if (!acc[settleStr]) acc[settleStr] = 0;
+        const fee = p.fee > 0 ? p.fee : getEstimatedFeeAndTax(p.amount, p.method);
+        acc[settleStr] += (p.amount - fee);
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+  const sortedSettlementDates = Object.keys(upcomingSettlements).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  const nextSettlementDateStr = sortedSettlementDates[0];
+  const nextSettlementAmount = nextSettlementDateStr ? upcomingSettlements[nextSettlementDateStr] : 0;
+
   return (
     <div className="flex min-h-screen bg-[#FAF8F5]">
       <Sidebar />
@@ -212,16 +232,18 @@ export default function RazorpayFinancialsPage() {
               </div>
             </div>
 
-            {/* Refunds */}
+            {/* Next Settlement */}
             <div className="ui-card p-5 relative overflow-hidden bg-white/85">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
-                  <RefreshCw size={16} />
+                <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                  <Calendar size={16} />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">Total Refunded</span>
+                  <span className="text-[10px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">
+                    Next Settlement {nextSettlementDateStr ? `(${nextSettlementDateStr.split(' ').slice(0, 2).join(' ')})` : ''}
+                  </span>
                   <h4 className="text-xl font-display font-bold text-[#4A154B] mt-0.5">
-                    ₹{summary.totalRefunded.toLocaleString("en-IN")}
+                    ₹{nextSettlementAmount.toLocaleString("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
                   </h4>
                 </div>
               </div>
