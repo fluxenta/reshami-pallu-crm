@@ -514,7 +514,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
             </div>
           </div>
           
-          {scheduledPickups.length > 0 && (
+          {scheduledPickups.length > 0 && unfulfilledOrders.length > 0 && (
             <button
               onClick={() => setShowScheduler(!showScheduler)}
               className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider bg-[#4A154B]/5 text-[#4A154B] hover:bg-[#4A154B]/10 transition-all cursor-pointer"
@@ -862,7 +862,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                         }}
                         className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
                       >
-                        {availableDays.map((d) => (
+                        {availableDays.filter(d => !scheduledPickups.some((sp: any) => sp.date === d.date)).map((d) => (
                           <option key={d.date} value={d.date}>{d.label}</option>
                         ))}
                       </select>
@@ -992,7 +992,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                   }}
                   className="h-10 rounded-xl border border-[#4A154B]/10 px-3 bg-white text-sm outline-none focus:border-[#4A154B] font-semibold cursor-pointer"
                 >
-                  {availableDays.map((d) => (
+                  {availableDays.filter(d => !scheduledPickups.some((sp: any) => sp.date === d.date)).map((d) => (
                     <option key={d.date} value={d.date}>{d.label}</option>
                   ))}
                 </select>
