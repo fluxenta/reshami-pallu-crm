@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { 
   Search, 
@@ -11,7 +11,10 @@ import {
   Clock, 
   Package,
   Receipt,
-  Truck
+  Truck,
+  MoreVertical,
+  Download,
+  Pencil
 } from "lucide-react";
 import OrderDetailModal from "./OrderDetailModal";
 
@@ -188,12 +191,12 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
           const awb = getOrderAwb(orderObj);
           const courier = getOrderCourierPartner(orderObj);
           if (awb) {
-            fetch(`/api/orders/track?awb=${encodeURIComponent(awb)}&courier=${encodeURIComponent(courier)}`)
+            fetch(`/api/orders/track?awb=${encodeURIComponent(awb)}&courier=${encodeURIComponent(courier)}&isManual=false`)
               .then(res => res.json())
               .then(data => {
                 if (data?.ok && data?.tracking?.status) {
                   const s = data.tracking.status.toLowerCase();
-                  if (s.includes("transit") || s.includes("out for") || s.includes("deliv") || s.includes("picked up") || s.includes("shipped")) {
+                  if (s.includes("transit") || s.includes("out for") || s.includes("deliv") || s.includes("picked") || s.includes("shipped") || s === "pickup" || s === "in_transit") {
                     setInTransitPickups(prev => ({ ...prev, [sp.id]: true }));
                   }
                 }
@@ -524,21 +527,19 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
       </div>
 
       {/* Daily Logistics Pickup Coordinator Panel */}
-      <div className="bg-white border border-[#4A154B]/10 rounded-2xl p-5 shadow-sm space-y-5">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#4A154B]/5 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-[#4A154B]/5 text-[#4A154B]">
-              <Truck size={18} className="text-[#D4AF37]" />
+      {unfulfilledOrders.length > 0 && (
+        <div className="bg-white border border-[#4A154B]/10 rounded-2xl p-5 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#4A154B]/5 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-[#4A154B]/5 text-[#4A154B]">
+                <Truck size={18} className="text-[#D4AF37]" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-[#4A154B]">
+                  Create Pickup
+                </h4>
+              </div>
             </div>
-            <div>
-              <h4 className="font-display font-bold text-sm text-[#4A154B]">
-                Daily Logistics Pickup Coordinator
-              </h4>
-              <p className="text-[11px] text-[#1A1A1A]/55">
-                Fulfill unmanifested orders and request courier pickup runs in bulk.
-              </p>
-            </div>
-          </div>
           
           {scheduledPickups.length > 0 && unfulfilledOrders.length > 0 && (
             <button
@@ -570,7 +571,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
           ) : (
             <div className="space-y-4">
               {/* Desktop view: Table list of unfulfilled */}
-              <div className="hidden md:block overflow-x-auto border border-[#4A154B]/10 rounded-xl">
+              <div className="hidden md:block overflow-hidden border border-[#4A154B]/10 rounded-xl">
                 <table className="w-full text-left border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-[#4A154B]/5 bg-[#FAF8F5] text-[10px] uppercase font-bold text-[#1A1A1A]/55">
@@ -1052,210 +1053,35 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
           </div>
         )}
 
-        {/* Manifested Orders Queue / Mapping */}
-        {manifestedOrders.length > 0 && (
-          <div className="border-t border-[#4A154B]/5 pt-4">
-            <span className="text-[10px] uppercase font-bold text-[#4A154B]/70 tracking-wider block mb-2">
-              Manifested Orders Queue ({manifestedOrders.length})
-            </span>
-            <div className="overflow-x-auto max-h-60 overflow-y-auto border border-[#4A154B]/10 rounded-xl">
-              <table className="w-full text-left border-collapse text-[11px]">
-                <thead>
-                  <tr className="border-b border-[#4A154B]/5 bg-[#FAF8F5] text-[9px] uppercase font-bold text-[#1A1A1A]/55">
-                    <th className="py-2.5 px-3">Order</th>
-                    <th className="py-2.5 px-3">AWB / Tracking ID</th>
-                    <th className="py-2.5 px-3">Shipping Status</th>
-                    <th className="py-2.5 px-3">ETA</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#4A154B]/5 bg-white font-semibold">
-                   {manifestedOrders.map((order) => {
-                    const awb = getOrderAwb(order);
-                    const pickup = getOrderPickupDetails(order);
-                    const deliveryStatusAttr = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "delivery_status");
-                    const deliveryStatus = deliveryStatusAttr?.value || (order.tags?.includes("delivery_status:delivered") ? "delivered" : "dispatched");
-                    
-                    // If an order has a pickup scheduled, it is definitely an automated Delhivery fulfillment
-                    const hasManualIndicators = order.customAttributes?.some((attr: any) => attr.key.toLowerCase() === "courier_partner") || order.tags?.some((t: string) => t.toLowerCase().startsWith("courier:"));
-                    const isManualFulfillment = !pickup && hasManualIndicators;
 
-                    return (
-                      <tr key={order.id} className="hover:bg-[#FAF8F5]/30">
-                        <td 
-                          className="py-2.5 px-3 font-bold text-[#4A154B] hover:text-[#D4AF37] cursor-pointer transition-colors"
-                          onClick={() => setSelectedOrder(order)}
-                        >
-                          {order.name}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-[#1A1A1A]/70">
-                          {editingAwbOrderId === order.id ? (
-                            <div className="flex flex-col gap-1.5 bg-[#FAF8F5] p-2 rounded-lg border border-[#4A154B]/10 w-64">
-                              <div className="flex items-center justify-between text-[9px] uppercase font-bold text-[#4A154B]/60">
-                                <span>Courier & AWB</span>
-                              </div>
-                              <select
-                                value={editingCourier}
-                                onChange={(e) => setEditingCourier(e.target.value)}
-                                className="h-7 w-full px-1.5 border border-[#4A154B]/20 rounded text-[11px] outline-none bg-white font-sans cursor-pointer"
-                              >
-                                <option value="Delhivery">Delhivery</option>
-                                <option value="Shiprocket">Shiprocket</option>
-                                <option value="Bluedart">Bluedart</option>
-                                <option value="DTDC">DTDC</option>
-                                <option value="India Post">India Post</option>
-                                <option value="Professional Couriers">Professional Couriers</option>
-                                <option value="Ekart Logistics">Ekart Logistics</option>
-                                <option value="Shadowfax">Shadowfax</option>
-                                <option value="Xpressbees">Xpressbees</option>
-                                <option value="SafeExpress">SafeExpress</option>
-                                <option value="Trackon">Trackon</option>
-                                <option value="Anjani">Anjani</option>
-                                <option value="Shree Maruti Courier">Shree Maruti Courier</option>
-                              </select>
-                              <input
-                                type="text"
-                                value={newAwbValue}
-                                onChange={(e) => setNewAwbValue(e.target.value)}
-                                placeholder="Enter AWB"
-                                className="h-7 w-full px-1.5 border border-[#4A154B]/20 rounded text-xs outline-none bg-white font-mono"
-                              />
-                              <div className="flex gap-1.5 justify-end">
-                                <button
-                                  type="button"
-                                  disabled={updatingAwb || !newAwbValue.trim()}
-                                  onClick={() => handleUpdateAwb(order.id, editingCourier)}
-                                  className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer"
-                                >
-                                  {updatingAwb ? "..." : "Save"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingAwbOrderId(null)}
-                                  className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-[9px] font-bold uppercase tracking-wider cursor-pointer"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span>{awb || <span className="italic text-gray-400">None</span>}</span>
-                              {deliveryStatus !== "delivered" && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingAwbOrderId(order.id);
-                                    setNewAwbValue(awb || "");
-                                    setEditingCourier(getOrderCourierPartner(order));
-                                  }}
-                                  className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-[#4A154B]/5 hover:bg-[#4A154B]/10 text-[#4A154B] border border-[#4A154B]/15 rounded transition-all cursor-pointer"
-                                >
-                                  Edit
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        {isManualFulfillment ? (
-                          <>
-                            <td className="py-2.5 px-3">
-                              <span className="inline-block text-[9px] font-bold uppercase rounded px-1.5 py-0.5 border bg-purple-50 text-purple-700 border-purple-200">
-                                {deliveryStatus === "delivered" ? "Delivered" : "Dispatched"}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3">
-                              <span className="text-[10px] text-gray-400">-</span>
-                            </td>
-                          </>
-                        ) : awb ? (
-                          <OrderTrackingCells awb={awb} courier={getOrderCourierPartner(order)} pickup={pickup} />
-                        ) : (
-                          <>
-                            <td className="py-2.5 px-3"><span className="text-[9px] text-[#1A1A1A]/40">Awaiting AWB</span></td>
-                            <td className="py-2.5 px-3">
-                              <span className="text-[10px] text-gray-400">Not Available</span>
-                            </td>
-                          </>
-                        )}
-                        <td className="py-2.5 px-3 text-right">
-                          {(() => {
-                            if (deliveryStatus === "delivered") {
-                              return <span className="text-[10px] text-green-700 font-bold uppercase">Delivered</span>;
-                            }
-
-                            if (isManualFulfillment) {
-                              return (
-                                <div className="flex justify-end gap-2 items-center">
-                                  {awb && (
-                                    <a
-                                      href={`https://www.ship24.com/tracking?p=${awb}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="px-2.5 py-1 bg-[#4A154B] hover:bg-[#4A154B]/90 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer no-underline"
-                                    >
-                                      Track Order
-                                    </a>
-                                  )}
-                                  <button
-                                    type="button"
-                                    disabled={manualFulfilling}
-                                    onClick={() => handleMarkDeliveredSubmit(order.id)}
-                                    className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
-                                  >
-                                    Mark Delivered
-                                  </button>
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div className="flex justify-end gap-2 items-center">
-                                {pickup ? (
-                                  <span className="text-[10px] text-green-700 font-semibold">Assigned (ID: {pickup.id})</span>
-                                ) : (
-                                  <span className="text-[10px] text-amber-700 font-semibold italic">Awaiting pickup</span>
-                                )}
-                                {awb && (
-                                  <a
-                                    href={`/api/orders/packing-slip?awb=${awb}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-2 py-1 bg-[#4A154B] hover:bg-[#4A154B]/90 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-all no-underline inline-block cursor-pointer"
-                                  >
-                                    Download Label
-                                  </a>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Orders Grid Table */}
-      {/* Orders Grid Table */}
-      <div className="ui-card overflow-hidden bg-white">
+      <div className="bg-white rounded-3xl border border-[#4A154B]/10 overflow-hidden shadow-[0_10px_30px_rgba(74,21,75,0.03)] backdrop-blur-sm">
         {/* Desktop view table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="hidden md:block overflow-hidden">
+          <table className="w-full text-left border-collapse table-fixed">
+            <colgroup>
+              <col className="w-[8%]" />
+              <col className="w-[10%]" />
+              <col className="w-[20%]" />
+              <col className="w-[10%]" />
+              <col className="w-[12%]" />
+              <col className="w-[20%]" />
+              <col className="w-[12%]" />
+              <col className="w-[8%]" />
+            </colgroup>
             <thead>
-              <tr className="border-b border-[#4A154B]/5 bg-[#FAF8F5]/50 text-[11px] uppercase font-bold text-[#1A1A1A]/50 tracking-wider">
-                <th className="py-4 px-6">Order</th>
-                <th className="py-4 px-6">Date</th>
-                <th className="py-4 px-6">Customer</th>
-                <th className="py-4 px-6 text-right">Revenue</th>
-                <th className="py-4 px-6 text-center">Net Margin</th>
-                <th className="py-4 px-6 text-center">Fulfillment</th>
-                <th className="py-4 px-6 text-center">Carrier</th>
-                <th className="py-4 px-6 text-center">Action</th>
+              <tr className="border-b border-[#4A154B]/10 bg-gradient-to-r from-[#4A154B]/5 to-transparent text-xs uppercase font-bold text-[#4A154B]/80 tracking-wider">
+                <th className="py-4 px-4">Order #</th>
+                <th className="py-4 px-4">Order Date</th>
+                <th className="py-4 px-4">Customer Name</th>
+                <th className="py-4 px-4 text-center">Order Amount</th>
+                <th className="py-4 px-4 text-center">Fulfillment Status</th>
+                <th className="py-4 px-4 text-center">Tracking ID</th>
+                <th className="py-4 px-4 text-center">ETA</th>
+                <th className="py-4 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#4A154B]/5 text-sm">
@@ -1267,139 +1093,33 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order) => {
-                  const { totalRetail, marginPercent } = getOrderNetMargin(order);
-                  const isPaid = order.displayFinancialStatus === "PAID";
-                  
-                  return (
-                    <tr 
-                      key={order.id} 
-                      onClick={() => setSelectedOrder(order)}
-                      className="hover:bg-[#FAF8F5]/30 transition-colors cursor-pointer group"
-                    >
-                      {/* Order name */}
-                      <td className="py-4 px-6 font-bold text-[#4A154B] group-hover:text-[#D4AF37] transition-colors">
-                        {order.name}
-                      </td>
-                      
-                      {/* Date */}
-                      <td className="py-4 px-6 text-[#1A1A1A]/60 font-semibold whitespace-nowrap">
-                        <span className="flex items-center gap-1">
-                          <Calendar size={12} />
-                          {new Date(order.createdAt).toLocaleDateString("en-IN", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric"
-                          })}
-                        </span>
-                      </td>
-
-                      {/* Customer Profile */}
-                      <td className="py-4 px-6 font-semibold">
-                        <div>
-                          <p className="text-[#1A1A1A]">
-                            {order.customer && (order.customer.firstName || order.customer.lastName)
-                              ? `${order.customer.firstName || ""} ${order.customer.lastName || ""}`.trim()
-                              : order.shippingAddress && (order.shippingAddress.firstName || order.shippingAddress.lastName)
-                              ? `${order.shippingAddress.firstName || ""} ${order.shippingAddress.lastName || ""}`.trim()
-                              : "Customer"}
-                          </p>
-                          {order.shippingAddress?.city && (
-                            <p className="text-[11px] text-[#1A1A1A]/40 flex items-center gap-0.5 mt-0.5">
-                              <MapPin size={10} />
-                              {order.shippingAddress.city}
-                            </p>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Retail revenue */}
-                      <td className="py-4 px-6 text-right font-display font-bold text-[#4A154B]">
-                        <div>
-                          <p>₹{totalRetail.toLocaleString("en-IN")}</p>
-                          <span className={`inline-block text-[9px] font-bold uppercase rounded px-1 mt-0.5 ${
-                            isPaid ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"
-                          }`}>
-                            {order.displayFinancialStatus}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Calculated private net margins */}
-                      <td className="py-4 px-6 text-center whitespace-nowrap">
-                        <span className={`inline-block text-[11px] font-bold rounded-lg px-2.5 py-0.5 border ${getMarginColor(marginPercent)}`}>
-                          +{Math.round(marginPercent)}% Margin
-                        </span>
-                      </td>
-
-                      {/* Fulfillment/Delhivery */}
-                      <td className="py-4 px-6 text-center whitespace-nowrap">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                            order.displayFulfillmentStatus === "FULFILLED" 
-                              ? "bg-green-50 text-green-700 border-green-200" 
-                              : "bg-yellow-50 text-yellow-700 border-yellow-200"
-                          }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                              order.displayFulfillmentStatus === "FULFILLED" ? "bg-green-500" : "bg-yellow-500"
-                            }`} />
-                            {order.displayFulfillmentStatus === "FULFILLED" ? "Shipped" : "Processing"}
-                          </span>
-
-                          {(() => {
-                            // Extract AWB
-                            const awbAttribute = order.customAttributes?.find(
-                              (attr: any) => attr.key.toLowerCase() === "awb" || attr.key.toLowerCase() === "trackingid"
-                            );
-                            let inlineAwb = awbAttribute ? awbAttribute.value : null;
-                            if (!inlineAwb && order.note) {
-                              const awbMatch = order.note.match(/AWB:\s*([^\s,]+)/i);
-                              if (awbMatch) inlineAwb = awbMatch[1];
-                            }
-
-                            if (inlineAwb) {
-                              return <LogisticsStatusBadge awb={inlineAwb} courier={getOrderCourierPartner(order)} />;
-                            }
-                            return null;
-                          })()}
-                        </div>
-                      </td>
-
-                      {/* Carrier chosen by customer */}
-                      <td className="py-4 px-6 text-center whitespace-nowrap">
-                        {(() => {
-                          const courierTag = order.tags?.find((tag: string) => tag.toLowerCase().startsWith("courier:"));
-                          const courierName = courierTag && courierTag.split(":")[1]?.trim() !== "Shiprocket" ? courierTag.split(":")[1]?.trim() : "Delhivery";
-                          return (
-                            <span className="inline-block text-[11px] font-bold rounded-lg px-2.5 py-0.5 border text-purple-700 bg-purple-50 border-purple-200">
-                              {courierName}
-                            </span>
-                          );
-                        })()}
-                      </td>
-
-                      {/* View Action */}
-                      <td className="py-4 px-6 text-center">
-                        <button
-                          type="button"
-                          className="p-1.5 rounded-lg bg-[#4A154B]/5 hover:bg-[#4A154B]/10 text-[#4A154B] transition-all flex items-center justify-center mx-auto cursor-pointer"
-                        >
-                          <Eye size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
+                filteredOrders.map((order) => (
+                  <MainOrderTableRow
+                    key={order.id}
+                    order={order}
+                    setSelectedOrder={setSelectedOrder}
+                    inTransitPickups={inTransitPickups}
+                    editingAwbOrderId={editingAwbOrderId}
+                    setEditingAwbOrderId={setEditingAwbOrderId}
+                    editingCourier={editingCourier}
+                    setEditingCourier={setEditingCourier}
+                    newAwbValue={newAwbValue}
+                    setNewAwbValue={setNewAwbValue}
+                    handleUpdateAwb={handleUpdateAwb}
+                    updatingAwb={updatingAwb}
+                    getOrderNetMargin={getOrderNetMargin}
+                  />
+                ))
               )}
             </tbody>
           </table>
         </div>
 
         {/* Mobile View card list */}
-        <div className="md:hidden divide-y divide-[#4A154B]/5">
+        <div className="md:hidden flex flex-col gap-4 p-4 bg-[#FAF8F5]/30">
           {filteredOrders.length === 0 ? (
-            <div className="py-12 text-center text-[#1A1A1A]/40 font-medium px-4">
-              <Package size={32} className="mx-auto mb-2 opacity-30" />
+            <div className="py-16 text-center text-[#1A1A1A]/40 font-medium bg-white rounded-2xl border border-[#4A154B]/5 px-4 shadow-sm">
+              <Package size={36} className="mx-auto mb-3 opacity-30 text-[#4A154B]" />
               No customer orders found matching your search.
             </div>
           ) : (
@@ -1416,11 +1136,14 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                 <div 
                   key={order.id}
                   onClick={() => setSelectedOrder(order)}
-                  className="p-4 flex flex-col gap-2.5 active:bg-[#FAF8F5]/60 transition-colors cursor-pointer"
+                  className="bg-white rounded-2xl border border-[#4A154B]/10 p-4 flex flex-col gap-3 shadow-[0_4px_20px_rgba(74,21,75,0.02)] active:scale-[0.98] transition-all cursor-pointer"
                 >
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-[#4A154B]">{order.name}</span>
-                    <span className="text-[11px] text-[#1A1A1A]/50">
+                  <div className="flex justify-between items-center border-b border-[#4A154B]/5 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-[#4A154B] text-sm">{order.name}</span>
+                    </div>
+                    <span className="text-[10px] text-[#1A1A1A]/45 flex items-center gap-1 font-medium">
+                      <Calendar size={10} />
                       {new Date(order.createdAt).toLocaleDateString("en-IN", {
                         month: "short",
                         day: "numeric",
@@ -1428,34 +1151,41 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                       })}
                     </span>
                   </div>
-                  <div className="flex justify-between items-start">
+                  
+                  <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <p className="text-xs font-semibold text-[#1A1A1A]">{customerName}</p>
+                      <p className="text-[9px] uppercase font-bold text-[#1A1A1A]/40 tracking-wider">Customer</p>
+                      <p className="font-bold text-[#1A1A1A] mt-0.5 truncate">{customerName}</p>
                       {order.shippingAddress?.city && (
-                        <p className="text-[10px] text-[#1A1A1A]/40 flex items-center gap-0.5 mt-0.5">
-                          <MapPin size={9} />
+                        <p className="text-[10px] text-[#1A1A1A]/50 flex items-center gap-0.5 mt-1 font-medium">
+                          <MapPin size={9} className="text-[#4A154B]/70" />
                           {order.shippingAddress.city}
                         </p>
                       )}
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-[#4A154B]">₹{totalRetail.toLocaleString("en-IN")}</p>
-                      <span className={`inline-block text-[9px] font-bold uppercase rounded px-1 mt-0.5 ${
-                        isPaid ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"
+                      <p className="text-[9px] uppercase font-bold text-[#1A1A1A]/40 tracking-wider">Amount</p>
+                      <p className="font-extrabold text-[#4A154B] mt-0.5">₹{totalRetail.toLocaleString("en-IN")}</p>
+                      <span className={`inline-block text-[9px] font-extrabold uppercase rounded-full px-2 py-0.5 mt-1 ${
+                        isPaid ? "bg-green-50 text-green-700 border border-green-200" : "bg-yellow-50 text-yellow-700 border border-yellow-200"
                       }`}>
                         {order.displayFinancialStatus}
                       </span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 pt-2 border-t border-[#4A154B]/5 justify-between items-center">
-                    <span className={`text-[10px] font-bold rounded-lg px-2 py-0.5 border ${getMarginColor(marginPercent)}`}>
+
+                  <div className="flex gap-2 pt-2 border-t border-[#4A154B]/5 justify-between items-center">
+                    <span className={`text-[9px] font-extrabold rounded-lg px-2 py-0.5 border ${getMarginColor(marginPercent)}`}>
                       +{Math.round(marginPercent)}% Margin
                     </span>
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                       order.displayFulfillmentStatus === "FULFILLED" 
                         ? "bg-green-50 text-green-700 border-green-200" 
                         : "bg-yellow-50 text-yellow-700 border-yellow-200"
                     }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        order.displayFulfillmentStatus === "FULFILLED" ? "bg-green-500" : "bg-yellow-500"
+                      }`} />
                       {order.displayFulfillmentStatus === "FULFILLED" ? "Shipped" : "Processing"}
                     </span>
                   </div>
@@ -1487,19 +1217,61 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
 
 // Inline lazy-loaded dynamic tracking status component
 import { useEffect as reactUseEffect } from "react";
-function OrderTrackingCells({ awb, courier, pickup }: { awb: string, courier?: string, pickup?: any }) {
-  const [status, setStatus] = useState<string | null>(null);
+function OrderEtaCell({ awb, courier, isManualFulfillment }: { awb: string, courier?: string, isManualFulfillment?: boolean }) {
   const [edd, setEdd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   reactUseEffect(() => {
     let active = true;
-    fetch(`/api/orders/track?awb=${encodeURIComponent(awb)}&courier=${encodeURIComponent(courier || "")}`)
+    fetch(`/api/orders/track?awb=${encodeURIComponent(awb)}&courier=${encodeURIComponent(courier || "")}&isManual=${!!isManualFulfillment}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (active && data?.ok && data?.tracking?.status) {
+          setEdd(data.tracking.edd);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [awb, courier, isManualFulfillment]);
+
+  const formatEdd = (eddString: string | null) => {
+    if (!eddString) return "-";
+    let cleaned = eddString.replace(/(,\s*|\s+)(evening|morning|afternoon)/i, "").trim();
+    const dateObj = new Date(cleaned);
+    if (!isNaN(dateObj.getTime())) {
+      const dayName = dateObj.toLocaleDateString("en-IN", { weekday: "short" });
+      const dateText = dateObj.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      return `${dateText} (${dayName})`;
+    }
+    return eddString;
+  };
+
+  return (
+    <td className="py-3.5 px-4 text-center">
+      {loading ? <span className="text-xs text-[#1A1A1A]/40 animate-pulse">Fetching...</span>
+      : !edd ? <span className="text-xs text-gray-400">-</span>
+      : <span className="text-xs text-blue-700 font-semibold">{formatEdd(edd)}</span>}
+    </td>
+  );
+}
+
+function LogisticsStatusBadge({ awb, courier, isManualFulfillment, tdClassName }: { awb: string, courier?: string, isManualFulfillment?: boolean, tdClassName?: string }) {
+  const [status, setStatus] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  reactUseEffect(() => {
+    let active = true;
+    fetch(`/api/orders/track?awb=${encodeURIComponent(awb)}&courier=${encodeURIComponent(courier || "")}&isManual=${!!isManualFulfillment}`)
       .then((res) => res.json())
       .then((data) => {
         if (active && data?.ok && data?.tracking?.status) {
           setStatus(data.tracking.status);
-          setEdd(data.tracking.edd);
         }
       })
       .catch(() => {})
@@ -1515,22 +1287,265 @@ function OrderTrackingCells({ awb, courier, pickup }: { awb: string, courier?: s
   const getBadgeStyle = (s: string) => {
     const norm = s.toLowerCase();
     if (norm.includes("deliv")) return "bg-green-50 text-green-700 border-green-200";
-    if (norm.includes("transit") || norm.includes("out for") || norm.includes("shipped")) return "bg-blue-50 text-blue-700 border-blue-200";
+    if (norm.includes("transit") || norm.includes("out for") || norm.includes("shipped") || norm === "pickup" || norm.includes("picked")) return "bg-blue-50 text-blue-700 border-blue-200";
     return "bg-[#D4AF37]/10 text-[#4A154B] border-[#D4AF37]/30";
   };
 
+  const getDisplayStatus = (s: string) => {
+    const norm = s.toLowerCase();
+    if (norm === "pickup" || norm === "in_transit" || norm === "in transit") return "In Transit";
+    return s;
+  };
+
+  if (loading) return <span className="text-xs text-[#1A1A1A]/40 animate-pulse mt-1">Checking status...</span>;
+  if (!status) return <span className="text-xs text-red-500 bg-red-50 px-1.5 py-0.5 rounded font-sans mt-1">No tracking</span>;
+
   return (
-    <>
-      <td className="py-2.5 px-3">
-        {loading ? <span className="text-[9px] text-[#1A1A1A]/40 animate-pulse">Checking status...</span>
-        : !status ? <span className="text-[9px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded font-mono">No tracking</span>
-        : <span className={`inline-block text-[9px] font-bold uppercase rounded px-1.5 py-0.5 border ${getBadgeStyle(status)}`}>{status}</span>}
+    <span className={`inline-block text-xs font-bold uppercase rounded px-1.5 py-0.5 border mt-1 ${getBadgeStyle(status)}`}>
+      {getDisplayStatus(status)}
+    </span>
+  );
+}
+
+function MainOrderTableRow({
+  order,
+  setSelectedOrder,
+  inTransitPickups,
+  editingAwbOrderId,
+  setEditingAwbOrderId,
+  editingCourier,
+  setEditingCourier,
+  newAwbValue,
+  setNewAwbValue,
+  handleUpdateAwb,
+  updatingAwb,
+  getOrderNetMargin
+}: any) {
+  const { totalRetail } = getOrderNetMargin(order);
+  const isPaid = order.displayFinancialStatus === "PAID";
+  
+  const getOrderAwb = (order: any) => {
+    const awbAttr = order.customAttributes?.find(
+      (attr: any) => attr.key.toLowerCase() === "awb" || attr.key.toLowerCase() === "trackingid"
+    );
+    if (awbAttr?.value) return awbAttr.value;
+
+    const awbMatch = order.note?.match(/AWB:\s*([^\s,]+)/i);
+    if (awbMatch) return awbMatch[1];
+    return null;
+  };
+
+  const getOrderPickupDetails = (order: any) => {
+    const pickupIdAttr = order.customAttributes?.find(
+      (attr: any) => attr.key.toLowerCase() === "pickup_id"
+    );
+    const pickupDateAttr = order.customAttributes?.find(
+      (attr: any) => attr.key.toLowerCase() === "pickup_date"
+    );
+    const pickupTimeAttr = order.customAttributes?.find(
+      (attr: any) => attr.key.toLowerCase() === "pickup_time"
+    );
+
+    if (pickupIdAttr?.value) {
+      return {
+        id: pickupIdAttr.value,
+        date: pickupDateAttr?.value || "N/A",
+        time: pickupTimeAttr?.value || "N/A"
+      };
+    }
+    return null;
+  };
+
+  const getOrderCourierPartner = (order: any) => {
+    const courierAttr = order.customAttributes?.find(
+      (attr: any) => attr.key.toLowerCase() === "courier_partner"
+    );
+    if (courierAttr?.value) return courierAttr.value;
+
+    const courierTag = order.tags?.find((tag: string) => tag.toLowerCase().startsWith("courier:"));
+    if (courierTag) return courierTag.split(":")[1]?.trim();
+    return "Delhivery";
+  };
+
+  const awb = getOrderAwb(order);
+  const pickup = getOrderPickupDetails(order);
+  const deliveryStatusAttr = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "delivery_status");
+  const deliveryStatus = deliveryStatusAttr?.value || (order.tags?.includes("delivery_status:delivered") ? "delivered" : "dispatched");
+  const hasManualIndicators = order.customAttributes?.some((attr: any) => attr.key.toLowerCase() === "courier_partner") || order.tags?.some((t: string) => t.toLowerCase().startsWith("courier:"));
+  const isManualFulfillment = !pickup && hasManualIndicators;
+  const courier = getOrderCourierPartner(order);
+
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setActionsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <tr 
+      onClick={() => setSelectedOrder(order)}
+      className="hover:bg-[#FAF8F5]/30 transition-colors cursor-pointer group relative"
+    >
+      <td className="py-3.5 px-4 font-bold text-[#4A154B] group-hover:text-[#D4AF37] transition-colors">
+        {order.name}
       </td>
-      <td className="py-2.5 px-3">
-        {loading ? <span className="text-[9px] text-[#1A1A1A]/40 animate-pulse">Fetching...</span>
-        : edd ? <span className="text-[10px] font-semibold text-[#4A154B]">{edd}</span>
-        : <span className="text-[10px] text-gray-400">Not Available</span>}
+      <td className="py-3.5 px-4 text-[#1A1A1A]/60 font-semibold whitespace-nowrap">
+        <span className="flex items-center gap-1">
+          <Calendar size={12} />
+          {new Date(order.createdAt).toLocaleDateString("en-IN", {
+            month: "short", day: "numeric", year: "numeric"
+          })}
+        </span>
       </td>
-    </>
+      <td className="py-3.5 px-4 font-semibold">
+        <p className="text-[#1A1A1A]">
+          {order.customer && (order.customer.firstName || order.customer.lastName)
+            ? `${order.customer.firstName || ""} ${order.customer.lastName || ""}`.trim()
+            : order.shippingAddress && (order.shippingAddress.firstName || order.shippingAddress.lastName)
+            ? `${order.shippingAddress.firstName || ""} ${order.shippingAddress.lastName || ""}`.trim()
+            : "Customer"}
+        </p>
+      </td>
+      <td className="py-3.5 px-4 text-center font-bold text-[#4A154B]">
+        <p>₹{totalRetail.toLocaleString("en-IN")}</p>
+      </td>
+      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+        <div className="flex flex-col items-center gap-1">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+            order.displayFulfillmentStatus === "FULFILLED" 
+              ? "bg-green-50 text-green-700 border-green-200" 
+              : "bg-yellow-50 text-yellow-700 border-yellow-200"
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              order.displayFulfillmentStatus === "FULFILLED" ? "bg-green-500" : "bg-yellow-500"
+            }`} />
+            {order.displayFulfillmentStatus === "FULFILLED" ? "Shipped" : "Processing"}
+          </span>
+          {awb && (
+            <LogisticsStatusBadge awb={awb} courier={courier} isManualFulfillment={isManualFulfillment} />
+          )}
+        </div>
+      </td>
+      <td className="py-3.5 px-4 font-sans text-[#1A1A1A]/70 text-center relative" onClick={(e) => e.stopPropagation()}>
+        {editingAwbOrderId === order.id ? (
+          <div className="flex flex-col gap-1.5 bg-[#FAF8F5] p-2 rounded-lg border border-[#4A154B]/10 w-48 text-left absolute z-20 shadow-lg top-1/2 -translate-y-1/2 left-0">
+            <div className="flex items-center justify-between text-[9px] uppercase font-bold text-[#4A154B]/60">
+              <span>Courier & AWB</span>
+            </div>
+            <select
+              value={editingCourier}
+              onChange={(e) => setEditingCourier(e.target.value)}
+              className="h-7 w-full px-1.5 border border-[#4A154B]/20 rounded text-[11px] outline-none bg-white font-sans cursor-pointer"
+            >
+              <option value="Delhivery">Delhivery</option>
+              <option value="Shiprocket">Shiprocket</option>
+              <option value="Bluedart">Bluedart</option>
+              <option value="DTDC">DTDC</option>
+            </select>
+            <input
+              type="text"
+              value={newAwbValue}
+              onChange={(e) => setNewAwbValue(e.target.value)}
+              placeholder="Enter AWB"
+              className="h-7 w-full px-1.5 border border-[#4A154B]/20 rounded text-xs outline-none bg-white font-sans"
+            />
+            <div className="flex gap-1.5 justify-end">
+              <button
+                type="button"
+                disabled={updatingAwb || !newAwbValue.trim()}
+                onClick={() => handleUpdateAwb(order.id, editingCourier)}
+                className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer"
+              >
+                {updatingAwb ? "..." : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingAwbOrderId(null)}
+                className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-2">
+            <span className="font-semibold text-xs tracking-wide">{awb || <span className="italic text-gray-400">None</span>}</span>
+            {deliveryStatus !== "delivered" && !pickup && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingAwbOrderId(order.id);
+                  setNewAwbValue(awb || "");
+                  setEditingCourier(courier);
+                }}
+                className="p-1 rounded-full bg-[#4A154B]/5 hover:bg-[#4A154B] text-[#4A154B] hover:text-white border border-[#4A154B]/15 hover:border-[#4A154B] transition-all duration-200 hover:scale-110 active:scale-95 hover:shadow-md cursor-pointer flex items-center justify-center"
+                title="Edit AWB/Courier"
+              >
+                <Pencil size={11} />
+              </button>
+            )}
+          </div>
+        )}
+      </td>
+      {awb ? (
+        <OrderEtaCell awb={awb} courier={courier} isManualFulfillment={isManualFulfillment} />
+      ) : (
+        <td className="py-3.5 px-4 text-center text-gray-400 text-xs">-</td>
+      )}
+
+      <td className="py-3.5 px-4 text-center relative" onClick={(e) => e.stopPropagation()}>
+        <div ref={dropdownRef} className="relative inline-block">
+          <button
+            type="button"
+            onClick={() => setActionsOpen(!actionsOpen)}
+            className="p-1.5 rounded-lg bg-[#4A154B]/5 hover:bg-[#4A154B]/10 text-[#4A154B] transition-all flex items-center justify-center cursor-pointer"
+          >
+            <MoreVertical size={16} />
+          </button>
+          {actionsOpen && (
+            <div className="absolute right-0 mt-1 w-40 bg-white border border-[#4A154B]/10 rounded-lg shadow-lg overflow-hidden z-20 text-left">
+              <button
+                type="button"
+                onClick={() => {
+                  setActionsOpen(false);
+                  setSelectedOrder(order);
+                }}
+                className="w-full px-3 py-2 text-xs font-semibold text-[#1A1A1A] hover:bg-[#FAF8F5] text-left flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Eye size={12} /> View Order
+              </button>
+              {awb && !isManualFulfillment && (!pickup || !inTransitPickups[pickup?.id]) && (
+                <a
+                  href={`/api/orders/packing-slip?awb=${awb}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setActionsOpen(false)}
+                  className="w-full px-3 py-2 text-xs font-semibold text-[#1A1A1A] hover:bg-[#FAF8F5] text-left flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Download size={12} /> Download Label
+                </a>
+              )}
+              <a
+                href={`/api/orders/receipt?orderId=${encodeURIComponent(order.id)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setActionsOpen(false)}
+                className="w-full px-3 py-2 text-xs font-semibold text-[#1A1A1A] hover:bg-[#FAF8F5] text-left flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Receipt size={12} /> Download Receipt
+              </a>
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }

@@ -18,57 +18,60 @@ export function getBaseUrl(): string {
   return mode === "live" ? LIVE_BASE : DEV_BASE;
 }
 
-export async function getTrackingByAwb(awbCode: string): Promise<NormalizedTracking | null> {
+export async function getTrackingByAwb(awbCode: string, isManual: boolean = false): Promise<NormalizedTracking | null> {
   const token = process.env.DELHIVERY_API_TOKEN || "";
   
-  // Try the public unified API first, as it bypasses origin account restrictions and gives precise ETA
-  try {
-    const pubRes = await fetch(`https://dlv-api.delhivery.com/v3/unified-tracking-new?wbn=${awbCode}`, {
-      method: "GET",
-      headers: {
-        "Origin": "https://www.delhivery.com",
-        "Referer": "https://www.delhivery.com/"
-      },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      cache: "no-store",
-    });
+  if (isManual) {
+    // Only use public unified API for manual fulfillments to bypass origin account restrictions
+    try {
+      const pubRes = await fetch(`https://dlv-api.delhivery.com/v3/unified-tracking-new?wbn=${awbCode}`, {
+        method: "GET",
+        headers: {
+          "Origin": "https://www.delhivery.com",
+          "Referer": "https://www.delhivery.com/"
+        },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        cache: "no-store",
+      });
 
-    if (pubRes.ok) {
-      const pubData = await pubRes.json();
-      if (pubData?.data && pubData.data.length > 0) {
-        const item = pubData.data[0];
-        const currentStatus = item.status?.status || item.hqStatus || "Manifested";
-        const edd = item.deliveryDate || item.deliveryDateText_v1 || "";
-        const deliveredDate = currentStatus.toLowerCase() === "delivered" ? item.status?.statusDateTime || "" : "";
-        
-        const activities: any[] = [];
-        if (item.trackingStates && Array.isArray(item.trackingStates)) {
-          item.trackingStates.forEach((state: any) => {
-            if (state.scans && Array.isArray(state.scans)) {
-              state.scans.forEach((scan: any) => {
-                activities.push({
-                  activity: scan.scan || scan.scanNslRemark || "Parcel processed",
-                  location: scan.scannedLocation || scan.cityLocation || "",
-                  date: scan.scanDateTime || state.date || new Date().toISOString(),
+      if (pubRes.ok) {
+        const pubData = await pubRes.json();
+        if (pubData?.data && pubData.data.length > 0) {
+          const item = pubData.data[0];
+          const currentStatus = item.status?.status || item.hqStatus || "Manifested";
+          const edd = item.deliveryDate || item.deliveryDateText_v1 || "";
+          const deliveredDate = currentStatus.toLowerCase() === "delivered" ? item.status?.statusDateTime || "" : "";
+          
+          const activities: any[] = [];
+          if (item.trackingStates && Array.isArray(item.trackingStates)) {
+            item.trackingStates.forEach((state: any) => {
+              if (state.scans && Array.isArray(state.scans)) {
+                state.scans.forEach((scan: any) => {
+                  activities.push({
+                    activity: scan.scan || scan.scanNslRemark || "Parcel processed",
+                    location: scan.scannedLocation || scan.cityLocation || "",
+                    date: scan.scanDateTime || state.date || new Date().toISOString(),
+                  });
                 });
-              });
-            }
-          });
+              }
+            });
+          }
+          
+          return {
+            status: currentStatus,
+            edd,
+            deliveredDate,
+            activities,
+          };
         }
-        
-        return {
-          status: currentStatus,
-          edd,
-          deliveredDate,
-          activities,
-        };
       }
+    } catch (err) {
+      console.error("Public Delhivery tracking fetch failed:", err);
     }
-  } catch (err) {
-    console.error("Public Delhivery tracking fetch failed, falling back to authenticated:", err);
+    return null; // Don't fallback to B2B API for manual orders as it will fail anyway
   }
 
-  // Fallback to authenticated B2B API
+  // Use authenticated B2B API for automated orders (created by us)
   if (!token) return null;
   const baseUrl = getBaseUrl();
   const url = `${baseUrl}/api/v1/packages/json/?waybill=${awbCode}&token=${token}`;

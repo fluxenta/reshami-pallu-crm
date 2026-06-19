@@ -46,20 +46,6 @@ export default function Header({ title }: HeaderProps) {
           <Calendar size={14} className="text-[#4A154B]" />
           <span>{dateStr || "Syncing Date..."}</span>
         </div>
-
-        {/* Business entity compliance badge */}
-        <div className="hidden lg:flex items-center gap-2 border border-[#D4AF37]/30 bg-[#D4AF37]/5 px-2.5 py-1 rounded-md text-[10px] font-bold text-[#4A154B] uppercase tracking-wider">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-ping" />
-          <span>Razorpay Compliant Setup</span>
-        </div>
-
-        {/* Support context indicator */}
-        <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-[#4A154B]/5 border border-[#4A154B]/10">
-          <User size={12} className="text-[#4A154B]" />
-          <span className="text-[10px] sm:text-xs font-semibold text-[#4A154B] uppercase tracking-wide">
-            Admin
-          </span>
-        </div>
       </div>
     </header>
   );

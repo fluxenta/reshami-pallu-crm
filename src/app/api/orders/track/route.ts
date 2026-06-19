@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const awb = searchParams.get("awb") || "";
     const courier = (searchParams.get("courier") || "").toLowerCase().trim();
+    const isManual = searchParams.get("isManual") === "true";
 
     if (!awb) {
       return NextResponse.json({ error: "AWB code is required" }, { status: 400 });
@@ -20,10 +21,10 @@ export async function GET(req: NextRequest) {
     if (courier === "shiprocket") {
       tracking = await getShiprocketTracking(awb);
     } else if (courier === "delhivery") {
-      tracking = await getDelhiveryTracking(awb);
+      tracking = await getDelhiveryTracking(awb, isManual);
     } else {
       // Automatic fallback lookup
-      tracking = await getDelhiveryTracking(awb);
+      tracking = await getDelhiveryTracking(awb, isManual);
       if (!tracking) {
         tracking = await getShiprocketTracking(awb);
       }

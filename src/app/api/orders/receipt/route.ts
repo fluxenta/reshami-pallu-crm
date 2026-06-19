@@ -343,11 +343,9 @@ export async function GET(req: NextRequest) {
   <!-- Header -->
   <div class="header">
     <div class="brand">Reshmi Pallu</div>
-    <div class="brand-tagline">Handwoven Heritage · Authentic Sarees</div>
     <div class="order-label">Order Receipt</div>
     <div class="order-number">${escapeHtml(orderNumber)}</div>
     <div class="order-date">${escapeHtml(orderDate)}</div>
-    <div class="badge">✓ Payment Confirmed</div>
   </div>
 
   <!-- Body -->
@@ -376,15 +374,15 @@ export async function GET(req: NextRequest) {
       </div>
     </div>
 
-    <!-- Items -->
+    <!-- Items Table -->
     <div class="section">
       <div class="section-label">Items Ordered</div>
-      <table>
+      <table style="width:100%;border-collapse:collapse;margin-top:8px;">
         <thead>
-          <tr>
-            <th>Product</th>
-            <th>Qty</th>
-            <th>Price</th>
+          <tr style="background:#fcfcfc;border-bottom:2px solid #eee;">
+            <th style="padding:10px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;letter-spacing:1px;font-weight:600;">Saree / Item</th>
+            <th style="padding:10px 8px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;letter-spacing:1px;font-weight:600;width:60px;">Qty</th>
+            <th style="padding:10px 8px;text-align:right;font-size:10px;text-transform:uppercase;color:#888;letter-spacing:1px;font-weight:600;width:120px;">Price</th>
           </tr>
         </thead>
         <tbody>
@@ -393,7 +391,6 @@ export async function GET(req: NextRequest) {
       </table>
     </div>
 
-    <!-- Totals -->
     <div class="section">
       <div class="section-label">Payment Summary</div>
       <div class="totals">
@@ -418,7 +415,7 @@ export async function GET(req: NextRequest) {
     <p style="margin-top:4px;">Questions? <a href="mailto:founder@reshmipallu.com">founder@reshmipallu.com</a></p>
     
     <div class="office-details">
-      <p><strong>Office Address:</strong> Second Floor, D-194, Okhla Industrial Area Phase 1, New Delhi, Delhi 110020</p>
+      <p><strong>Office Address:</strong> 308,Multi Diamond Apartment, 6th Main 11th Cross, Balaji Layout, Kodigehalli,560092</p>
       <p style="margin-top:4px;"><strong>Udyam Registration Number:</strong> UDYAM-KR-03-0697865</p>
     </div>
     <p style="margin-top:12px;font-size:9px;color:#bbb;">
