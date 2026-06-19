@@ -51,6 +51,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
   // Bulk Processing States
   const [selectedUnfulfilled, setSelectedUnfulfilled] = useState<Record<string, boolean>>({});
   const [orderDimensions, setOrderDimensions] = useState<Record<string, { weightGrams: string, length: string, width: string, height: string }>>({});
+  const [inTransitPickups, setInTransitPickups] = useState<Record<string, boolean>>({});
 
   const searchParams = useSearchParams();
   const orderNameParam = searchParams.get("name");
@@ -178,6 +179,31 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
     }
     return acc;
   }, []);
+
+  useEffect(() => {
+    scheduledPickups.forEach((sp: any) => {
+      if (sp.orders.length > 0 && !inTransitPickups[sp.id]) {
+        const orderObj = initialOrders.find(o => o.name === sp.orders[0]);
+        if (orderObj) {
+          const awb = getOrderAwb(orderObj);
+          const courier = getOrderCourierPartner(orderObj);
+          if (awb) {
+            fetch(`/api/orders/track?awb=${encodeURIComponent(awb)}&courier=${encodeURIComponent(courier)}`)
+              .then(res => res.json())
+              .then(data => {
+                if (data?.ok && data?.tracking?.status) {
+                  const s = data.tracking.status.toLowerCase();
+                  if (s.includes("transit") || s.includes("out for") || s.includes("deliv") || s.includes("picked up") || s.includes("shipped")) {
+                    setInTransitPickups(prev => ({ ...prev, [sp.id]: true }));
+                  }
+                }
+              })
+              .catch(() => {});
+          }
+        }
+      }
+    });
+  }, [JSON.stringify(scheduledPickups.map(s => s.id))]);
 
   const manifestedOrders = initialOrders.filter((order) => !!getOrderAwb(order));
 
@@ -912,13 +938,13 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
 
 
         {/* Scheduled Pickups Status */}
-        {scheduledPickups.length > 0 ? (
+        {scheduledPickups.filter((sp: any) => !inTransitPickups[sp.id]).length > 0 ? (
           <div className="space-y-2.5 border-t border-[#4A154B]/5 pt-4">
             <span className="text-[9px] uppercase font-bold text-[#4A154B]/55 tracking-wider block">
               Active scheduled pickups for the day
             </span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {scheduledPickups.map((pickup) => (
+              {scheduledPickups.filter((sp: any) => !inTransitPickups[sp.id]).map((pickup) => (
                 <div key={pickup.id} className="p-3 bg-green-50/70 border border-green-200/50 rounded-xl space-y-1 text-xs text-green-800">
                   <p className="font-bold flex items-center gap-1.5 text-green-700">
                     <CheckCircle2 size={13} />
@@ -1166,6 +1192,16 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                             if (isManualFulfillment) {
                               return (
                                 <div className="flex justify-end gap-2 items-center">
+                                  {awb && (
+                                    <a
+                                      href={`https://parcelsapp.com/en/tracking/${awb}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-2.5 py-1 bg-[#4A154B] hover:bg-[#4A154B]/90 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer no-underline"
+                                    >
+                                      Track Order
+                                    </a>
+                                  )}
                                   <button
                                     type="button"
                                     disabled={manualFulfilling}
@@ -1195,14 +1231,6 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                                     Download Label
                                   </a>
                                 )}
-                                <button
-                                  type="button"
-                                  disabled={manualFulfilling}
-                                  onClick={() => handleMarkDeliveredSubmit(order.id)}
-                                  className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
-                                >
-                                  Mark Delivered
-                                </button>
                               </div>
                             );
                           })()}
