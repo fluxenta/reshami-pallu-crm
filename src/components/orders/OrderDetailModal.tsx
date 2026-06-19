@@ -15,7 +15,8 @@ import {
   ExternalLink,
   RefreshCw,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  Download
 } from "lucide-react";
 
 interface OrderDetailModalProps {
@@ -232,7 +233,8 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold uppercase tracking-wider bg-white hover:bg-gray-50 text-[#4A154B] border border-[#4A154B]/20 no-underline transition-all shadow-sm cursor-pointer"
             >
-              <span>Receipt 📄</span>
+              <Download size={14} />
+              <span>Receipt</span>
             </a>
             {awb && !isManualFulfillment && (!tracking?.status || (!tracking.status.toLowerCase().includes("transit") && !tracking.status.toLowerCase().includes("picked") && !tracking.status.toLowerCase().includes("shipped") && tracking.status.toLowerCase() !== "delivered")) && (
               <a
