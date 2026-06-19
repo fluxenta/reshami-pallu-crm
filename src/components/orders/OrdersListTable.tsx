@@ -1065,7 +1065,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                     <th className="py-2.5 px-3">Order</th>
                     <th className="py-2.5 px-3">AWB / Tracking ID</th>
                     <th className="py-2.5 px-3">Shipping Status</th>
-                    <th className="py-2.5 px-3">Pickup Status</th>
+                    <th className="py-2.5 px-3">ETA</th>
                     <th className="py-2.5 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -1157,32 +1157,27 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                             </div>
                           )}
                         </td>
-                        <td className="py-2.5 px-3">
-                          {isManualFulfillment ? (
-                            <span className="inline-block text-[9px] font-bold uppercase rounded px-1.5 py-0.5 border bg-purple-50 text-purple-700 border-purple-200">
-                              {deliveryStatus === "delivered" ? "Delivered" : "Dispatched"}
-                            </span>
-                          ) : (
-                            awb ? <LogisticsStatusBadge awb={awb} courier={getOrderCourierPartner(order)} /> : <span className="text-[9px] text-[#1A1A1A]/40">Awaiting AWB</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          {isManualFulfillment ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] border border-purple-200">
-                              Manual Fulfillment ({getOrderCourierPartner(order)})
-                            </span>
-                          ) : pickup ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] border border-green-200">
-                              <CheckCircle2 size={10} />
-                              Scheduled (ID: {pickup.id})
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] border border-amber-200">
-                              <Clock size={10} />
-                              Awaiting Pickup
-                            </span>
-                          )}
-                        </td>
+                        {isManualFulfillment ? (
+                          <>
+                            <td className="py-2.5 px-3">
+                              <span className="inline-block text-[9px] font-bold uppercase rounded px-1.5 py-0.5 border bg-purple-50 text-purple-700 border-purple-200">
+                                {deliveryStatus === "delivered" ? "Delivered" : "Dispatched"}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className="text-[10px] text-gray-400">-</span>
+                            </td>
+                          </>
+                        ) : awb ? (
+                          <OrderTrackingCells awb={awb} courier={getOrderCourierPartner(order)} pickup={pickup} />
+                        ) : (
+                          <>
+                            <td className="py-2.5 px-3"><span className="text-[9px] text-[#1A1A1A]/40">Awaiting AWB</span></td>
+                            <td className="py-2.5 px-3">
+                              <span className="text-[10px] text-gray-400">Not Available</span>
+                            </td>
+                          </>
+                        )}
                         <td className="py-2.5 px-3 text-right">
                           {(() => {
                             if (deliveryStatus === "delivered") {
@@ -1492,8 +1487,9 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
 
 // Inline lazy-loaded dynamic tracking status component
 import { useEffect as reactUseEffect } from "react";
-function LogisticsStatusBadge({ awb, courier }: { awb: string, courier?: string }) {
+function OrderTrackingCells({ awb, courier, pickup }: { awb: string, courier?: string, pickup?: any }) {
   const [status, setStatus] = useState<string | null>(null);
+  const [edd, setEdd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   reactUseEffect(() => {
@@ -1503,6 +1499,7 @@ function LogisticsStatusBadge({ awb, courier }: { awb: string, courier?: string 
       .then((data) => {
         if (active && data?.ok && data?.tracking?.status) {
           setStatus(data.tracking.status);
+          setEdd(data.tracking.edd);
         }
       })
       .catch(() => {})
@@ -1515,24 +1512,25 @@ function LogisticsStatusBadge({ awb, courier }: { awb: string, courier?: string 
     };
   }, [awb, courier]);
 
-  if (loading) {
-    return <span className="text-[9px] text-[#1A1A1A]/40 animate-pulse">Checking status...</span>;
-  }
-
-  if (!status) {
-    return <span className="text-[9px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded font-mono">No tracking</span>;
-  }
-
   const getBadgeStyle = (s: string) => {
     const norm = s.toLowerCase();
     if (norm.includes("deliv")) return "bg-green-50 text-green-700 border-green-200";
-    if (norm.includes("transit") || norm.includes("out for")) return "bg-blue-50 text-blue-700 border-blue-200";
+    if (norm.includes("transit") || norm.includes("out for") || norm.includes("shipped")) return "bg-blue-50 text-blue-700 border-blue-200";
     return "bg-[#D4AF37]/10 text-[#4A154B] border-[#D4AF37]/30";
   };
 
   return (
-    <span className={`inline-block text-[9px] font-bold uppercase rounded px-1.5 py-0.5 border ${getBadgeStyle(status)}`}>
-      {status}
-    </span>
+    <>
+      <td className="py-2.5 px-3">
+        {loading ? <span className="text-[9px] text-[#1A1A1A]/40 animate-pulse">Checking status...</span>
+        : !status ? <span className="text-[9px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded font-mono">No tracking</span>
+        : <span className={`inline-block text-[9px] font-bold uppercase rounded px-1.5 py-0.5 border ${getBadgeStyle(status)}`}>{status}</span>}
+      </td>
+      <td className="py-2.5 px-3">
+        {loading ? <span className="text-[9px] text-[#1A1A1A]/40 animate-pulse">Fetching...</span>
+        : edd ? <span className="text-[10px] font-semibold text-[#4A154B]">{edd}</span>
+        : <span className="text-[10px] text-gray-400">Not Available</span>}
+      </td>
+    </>
   );
 }
