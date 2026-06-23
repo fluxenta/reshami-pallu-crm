@@ -91,6 +91,9 @@ export default function BulkUploadPage() {
   const [isCached, setIsCached] = useState(false);
   const [sheetSearchQuery, setSheetSearchQuery] = useState("");
 
+  // Sync Progress State
+  const [syncProgress, setSyncProgress] = useState<{ step: number; text: string; status: string; log: string } | null>(null);
+
   // Google Sheet & Drive URLs (hardcoded as per user request)
   const sheetUrl = "https://docs.google.com/spreadsheets/d/1vdxcGu_rxqJLSW7HJcRPhrek-WLMBtIAccIfnfwTswA/edit?gid=1836349698#gid=1836349698";
   const driveUrl = "https://drive.google.com/drive/u/4/folders/1mxvLUG0u-RIH9Uoxt4q7nWvEQY1dPxPD";
@@ -150,6 +153,21 @@ export default function BulkUploadPage() {
     setGoogleSyncing(true);
     setSuccess(false);
     setReport([]);
+    setSyncProgress({ step: 1, text: "Validating spreadsheet catalog...", status: "active", log: "Starting direct workspace sync..." });
+
+    // Poll progress every 1.5 seconds
+    const interval = setInterval(async () => {
+      try {
+        const progressRes = await fetch("/api/admin/google-sync?progress=true");
+        if (progressRes.ok) {
+          const progressData = await progressRes.json();
+          setSyncProgress(progressData);
+        }
+      } catch (err) {
+        console.error("Progress polling error:", err);
+      }
+    }, 1500);
+
     try {
       const res = await fetch("/api/admin/google-sync", {
         method: "POST",
@@ -174,7 +192,9 @@ export default function BulkUploadPage() {
     } catch (err: any) {
       showAlert("Sync Failure", err.message || "An unexpected error occurred during sync.");
     } finally {
+      clearInterval(interval);
       setGoogleSyncing(false);
+      setSyncProgress(null);
     }
   };
 
@@ -283,19 +303,46 @@ export default function BulkUploadPage() {
                 {/* Stepper */}
                 <div className="space-y-3 pt-2">
                   {[
-                    { num: "1", text: "Parse Google Sheet catalog rows and validate structure" },
-                    { num: "2", text: "Map serial numbers to Google Drive image subfolders" },
-                    { num: "3", text: "Download raw saree photoshoot assets to local storage" },
-                    { num: "4", text: "Execute Gemini fabric analysis & Imagen AI Lookbook try-on generations" },
-                    { num: "5", text: "Publish optimized lookbooks to Shopify catalog and sync Upstash Redis" }
-                  ].map((step, idx) => (
-                    <div key={idx} className="flex items-start gap-3 text-xs">
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[#4A154B]/10 text-[#4A154B] font-bold text-[10px] shrink-0">
-                        {step.num}
-                      </span>
-                      <span className="text-gray-600 font-medium pt-0.5">{step.text}</span>
-                    </div>
-                  ))}
+                    { num: 1, text: "Parse Google Sheet catalog rows and validate structure" },
+                    { num: 2, text: "Map serial numbers to Google Drive image subfolders" },
+                    { num: 3, text: "Download raw saree photoshoot assets to local storage" },
+                    { num: 4, text: "Execute Gemini fabric analysis & Imagen AI Lookbook try-on generations" },
+                    { num: 5, text: "Publish optimized lookbooks to Shopify catalog and sync Upstash Redis" }
+                  ].map((step, idx) => {
+                    const isCompleted = syncProgress ? syncProgress.step > step.num : false;
+                    const isActive = syncProgress ? syncProgress.step === step.num : false;
+                    const isFuture = syncProgress ? syncProgress.step < step.num : true;
+
+                    let badgeStyle = "bg-gray-100 text-gray-400";
+                    let textStyle = "text-gray-400";
+
+                    if (isCompleted) {
+                      badgeStyle = "bg-green-100 text-green-700 font-bold";
+                      textStyle = "text-gray-600 line-through decoration-green-300 decoration-1";
+                    } else if (isActive) {
+                      badgeStyle = "bg-[#4A154B] text-white animate-pulse font-bold";
+                      textStyle = "text-[#4a154b] font-bold";
+                    } else if (!isFuture) {
+                      badgeStyle = "bg-[#4A154B]/10 text-[#4A154B]";
+                      textStyle = "text-gray-600 font-medium";
+                    }
+
+                    return (
+                      <div key={idx} className="flex items-start gap-3 text-xs transition-all duration-300">
+                        <span className={`flex items-center justify-center w-5 h-5 rounded-full font-bold text-[10px] shrink-0 ${badgeStyle}`}>
+                          {isCompleted ? "✓" : step.num}
+                        </span>
+                        <div className="space-y-1">
+                          <span className={`transition-colors duration-300 ${textStyle}`}>{step.text}</span>
+                          {isActive && syncProgress && syncProgress.log && (
+                            <div className="text-[10px] text-[#4A154B]/70 font-semibold italic bg-[#4A154B]/5 border border-[#4A154B]/10 rounded-lg p-2 max-w-lg animate-fadeIn">
+                              {syncProgress.log}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl p-3.5 flex items-center gap-2 mt-2">

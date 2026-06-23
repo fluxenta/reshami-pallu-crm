@@ -5,7 +5,7 @@ import path from "path";
 import os from "os";
 import sharp from "sharp";
 import { shopifySaree, shopifyAdminFetch } from "@/lib/shopify";
-import { sareeDb } from "@/lib/db";
+import { sareeDb, db } from "@/lib/db";
 
 // Authentication Helper
 async function verifySession() {
@@ -112,6 +112,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const isProgressRequest = searchParams.get("progress") === "true";
+    if (isProgressRequest) {
+      const progress = await db.get("google-sync:progress") || { step: 0, text: "Idle", status: "idle", log: "" };
+      return NextResponse.json(progress);
+    }
+
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     const sheetUrl = "https://docs.google.com/spreadsheets/d/1vdxcGu_rxqJLSW7HJcRPhrek-WLMBtIAccIfnfwTswA/edit?gid=1836349698#gid=1836349698";
     const sheetId = extractSpreadsheetId(sheetUrl);
@@ -124,7 +131,6 @@ export async function GET(req: NextRequest) {
     let csvContent = "";
     let fetched = false;
 
-    const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get("refresh") === "true";
 
     if (fs.existsSync(cachePath) && !forceRefresh) {
@@ -296,6 +302,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { sheetUrl, driveUrl } = body;
 
+    await db.set("google-sync:progress", { step: 1, text: "Validating spreadsheet catalog...", status: "active", log: "Reading Google Sheet columns..." });
+
     if (!sheetUrl || !driveUrl) {
       return NextResponse.json({ error: "Google Sheet URL and Google Drive URL are required." }, { status: 400 });
     }
@@ -355,6 +363,7 @@ export async function POST(req: NextRequest) {
     };
 
     // 2. Fetch Google Drive Folders mapping serial numbers to drive folder IDs
+    await db.set("google-sync:progress", { step: 2, text: "Mapping serial numbers to Google Drive...", status: "active", log: "Fetching folder lists from parent Google Drive folder..." });
     const listFoldersUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
       `'${driveId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
     )}&key=${apiKey}&fields=files(id,name)&pageSize=1000`;
@@ -374,6 +383,7 @@ export async function POST(req: NextRequest) {
     // 3. Pre-flight check: scan for new rows that need syncing
     const newRowsToSync = [];
     const inventoryDir = path.join(os.tmpdir(), "inventory");
+    await db.set("google-sync:progress", { step: 3, text: "Scanning Drive folders and cache for new sarees...", status: "active", log: "Locating new non-uploaded serial number image folders..." });
     if (!fs.existsSync(inventoryDir)) {
       fs.mkdirSync(inventoryDir, { recursive: true });
     }
@@ -487,6 +497,13 @@ export async function POST(req: NextRequest) {
         status: "failed",
         timestamp: new Date().toISOString()
       };
+
+      await db.set("google-sync:progress", { 
+        step: 4, 
+        text: `AI Photoshoot: Saree ${serialNum}`, 
+        status: "active", 
+        log: `Downloading raw images for Saree ${serialNum} and executing Gemini fabric analysis & Imagen model generations...` 
+      });
 
       try {
         // Download images from subfolder
@@ -802,6 +819,13 @@ export async function POST(req: NextRequest) {
           privateNotes: item['privatenotes'] || ''
         };
 
+        await db.set("google-sync:progress", { 
+          step: 5, 
+          text: `Publishing Saree ${serialNum} to Shopify`, 
+          status: "active", 
+          log: `Uploading optimized images to Shopify Files CDN and creating listing for SKU ${sku}...` 
+        });
+
         const createdProduct = await shopifySaree.create(payload);
 
         // Redis save
@@ -857,9 +881,12 @@ export async function POST(req: NextRequest) {
     const reportPath = path.resolve(process.cwd(), "public/bulk-upload-report.json");
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf-8");
 
+    await db.set("google-sync:progress", { step: 5, text: "Direct Sync Completed Successfully", status: "completed", log: `Successfully processed ${report.filter(r => r.status === "success").length} sarees.` });
+
     return NextResponse.json({ success: true, report });
   } catch (err: any) {
     console.error("Google Sync API fail:", err);
+    await db.set("google-sync:progress", { step: 5, text: "Sync Failed", status: "failed", log: err.message || String(err) });
     return NextResponse.json({ error: err.message || "Google Sync failed" }, { status: 500 });
   }
 }
