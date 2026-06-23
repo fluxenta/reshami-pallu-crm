@@ -70,6 +70,57 @@ function extractDriveFolderId(url: string): string | null {
   return matches ? matches[1] : url;
 }
 
+// Update Local Cache CSV with Synced Status
+function updateLocalCacheCSV(serialNum: string, sku: string, title: string, description: string, weave: string, colors: string, uploaded: string) {
+  try {
+    const cachePath = path.join(os.tmpdir(), "google_sheet_cache.csv");
+    if (!fs.existsSync(cachePath)) return;
+
+    const csvContent = fs.readFileSync(cachePath, "utf-8");
+    const rows = parseCSV(csvContent);
+    if (rows.length < 2) return;
+
+    const headers = rows[0];
+    const normalizeKey = (key: string) => key.replace(/\([^)]*\)/g, '').trim().toLowerCase().replace(/[\s_-]/g, '');
+    
+    const serialIdx = headers.findIndex(h => normalizeKey(h) === 'serialnumber');
+    const skuIdx = headers.findIndex(h => normalizeKey(h) === 'sku');
+    const titleIdx = headers.findIndex(h => normalizeKey(h) === 'title');
+    const descIdx = headers.findIndex(h => normalizeKey(h) === 'description');
+    const weaveIdx = headers.findIndex(h => normalizeKey(h) === 'weave' || normalizeKey(h) === 'weaveoptional');
+    const colorsIdx = headers.findIndex(h => normalizeKey(h) === 'colors' || normalizeKey(h) === 'colorscommaseperated');
+    const uploadedIdx = headers.findIndex(h => normalizeKey(h) === 'uploaded' || normalizeKey(h) === 'uploadedy/n');
+
+    let updated = false;
+    for (let i = 2; i < rows.length; i++) {
+      if (rows[i][serialIdx]?.trim() === serialNum.trim()) {
+        if (skuIdx !== -1) rows[i][skuIdx] = sku;
+        if (titleIdx !== -1) rows[i][titleIdx] = title;
+        if (descIdx !== -1) rows[i][descIdx] = description;
+        if (weaveIdx !== -1) rows[i][weaveIdx] = weave;
+        if (colorsIdx !== -1) rows[i][colorsIdx] = colors;
+        if (uploadedIdx !== -1) rows[i][uploadedIdx] = uploaded;
+        updated = true;
+        break;
+      }
+    }
+
+    if (updated) {
+      const newCSV = rows.map(row => 
+        row.map(cell => {
+          const escaped = cell.replace(/"/g, '""');
+          return escaped.includes(',') || escaped.includes('\n') || escaped.includes('"') ? `"${escaped}"` : escaped;
+        }).join(',')
+      ).join('\n');
+      
+      fs.writeFileSync(cachePath, newCSV, "utf-8");
+      console.log(`[Google Sync API] Updated local CSV cache for serial number ${serialNum}.`);
+    }
+  } catch (err) {
+    console.error("Failed to update local CSV cache:", err);
+  }
+}
+
 interface UploadReportItem {
   serialNumber: string;
   sku: string;
@@ -838,6 +889,9 @@ export async function POST(req: NextRequest) {
 
         reportItem.status = "success";
         reportItem.shopifyId = createdProduct.id;
+
+        // Update local cache CSV immediately so UI matches the Shopify status
+        updateLocalCacheCSV(serialNum, sku, cleanTitle, sareeDescription, cleanWeave, cleanColors, "Y");
 
         // 7. Write Back to Google Sheet using Google Apps Script Web App
         const scriptUrl = process.env.GOOGLE_SCRIPT_URL;
