@@ -1,11 +1,11 @@
 import { Redis } from "@upstash/redis";
 
 // Check that environment variables exist
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
-const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL || "https://placeholder-url.upstash.io";
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || "placeholder-token";
 
-if (!redisUrl || !redisToken) {
-  throw new Error("Missing Upstash Redis environment variables in .env.local");
+if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+  console.warn("[DB] Warning: Missing Upstash Redis environment variables. Using placeholder values.");
 }
 
 export const db = new Redis({

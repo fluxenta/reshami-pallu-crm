@@ -47,3 +47,9 @@ next-env.d.ts
 # open-next & wrangler
 /.open-next/
 /.wrangler/
+
+# IDEs, AI tools, and tool logs
+.embold/
+.cursor/
+.claude/
+*.log
