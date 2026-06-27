@@ -43,3 +43,7 @@ next-env.d.ts
 # data
 /data
 /scratch
+
+# open-next & wrangler
+/.open-next/
+/.wrangler/
