@@ -220,10 +220,10 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
         setOrderDimensions(dims => ({
           ...dims,
           [orderId]: {
-            weightGrams: "500", // Default: 500 grams (0.5 kg)
-            length: "30",       // Default: 30 cm
-            width: "20",        // Default: 20 cm
-            height: "5"         // Default: 5 cm
+            weightGrams: "1000", // Default: 1000 grams (1.0 kg)
+            length: "40",        // Default: 40 cm
+            width: "30",         // Default: 30 cm
+            height: "6"          // Default: 6 cm
           }
         }));
       }
@@ -337,32 +337,60 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
   const [cancellingPickupId, setCancellingPickupId] = useState<string | null>(null);
 
   const handleCancelPickup = async (pickupId: string, orderNames: string[]) => {
-    const matchedOrderIds = initialOrders
-      .filter(o => orderNames.includes(o.name))
-      .map(o => o.id);
+    // Collect order IDs from matched order names
+    const orderIdsToCancel: string[] = [];
+    orderNames.forEach(name => {
+      const matched = initialOrders.find(o => o.name === name);
+      if (matched) orderIdsToCancel.push(matched.id);
+    });
 
-    if (matchedOrderIds.length === 0) return;
+    if (orderIdsToCancel.length === 0) {
+      alert("No matching orders found in CRM to clear.");
+      return;
+    }
 
-    if (!confirm("Are you sure you want to cancel/clear this pickup request in the CRM? This will allow you to reschedule a new pickup.")) {
+    if (!confirm("Are you sure you want to cancel the shipments for all linked orders from Delhivery and Shopify, and clear this scheduled pickup request?")) {
       return;
     }
 
     setCancellingPickupId(pickupId);
     try {
+      // 1. Individually cancel all shipments associated with this pickup
+      let errorsCount = 0;
+      for (const orderId of orderIdsToCancel) {
+        try {
+          const cancelRes = await fetch("/api/orders/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId })
+          });
+          if (!cancelRes.ok) {
+            errorsCount++;
+          }
+        } catch {
+          errorsCount++;
+        }
+      }
+
+      if (errorsCount > 0) {
+        console.warn(`Attempted to cancel shipments, encountered issues with ${errorsCount} orders.`);
+      }
+
+      // 2. Clear pickup scheduler tags & attributes on Shopify
       const res = await fetch("/api/orders/pickup/cancel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds: matchedOrderIds }),
+        body: JSON.stringify({ orderIds: orderIdsToCancel })
       });
       if (res.ok) {
-        alert("Pickup successfully cleared in CRM.");
+        alert("Pickup successfully cleared and all individual shipments cancelled on Delhivery!");
         window.location.reload();
       } else {
         const data = await res.json();
-        alert(data.error || "Failed to clear pickup.");
+        alert(data.error || "Failed to clear pickup metadata.");
       }
     } catch {
-      alert("Network error. Could not clear pickup.");
+      alert("Network error occurred during pickup cancelling.");
     } finally {
       setCancellingPickupId(null);
     }
@@ -423,6 +451,8 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
     }
   };
 
+  const [customCourierCost, setCustomCourierCost] = useState("");
+
   const handleManualFulfillSubmit = async (orderId: string) => {
     if (!manualAwb || !manualCourier) {
       alert("Please enter AWB number and select Courier Partner.");
@@ -437,6 +467,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
           orderId,
           awb: manualAwb,
           courierPartner: manualCourier,
+          courierCost: customCourierCost ? Number(customCourierCost) : undefined,
           action: "dispatch",
         }),
       });
@@ -445,6 +476,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
         setManualFulfillOrderId(null);
         setManualAwb("");
         setManualCourier("");
+        setCustomCourierCost("");
         window.location.reload();
       } else {
         const data = await res.json();
@@ -527,7 +559,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
       </div>
 
       {/* Daily Logistics Pickup Coordinator Panel */}
-      {unfulfilledOrders.length > 0 && (
+      {(unfulfilledOrders.length > 0 || scheduledPickups.filter((sp: any) => !inTransitPickups[sp.id]).length > 0) && (
         <div className="bg-white border border-[#4A154B]/10 rounded-2xl p-5 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#4A154B]/5 pb-3">
             <div className="flex items-center gap-2.5">
@@ -536,7 +568,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
               </div>
               <div>
                 <h4 className="font-bold text-sm text-[#4A154B]">
-                  Create Pickup
+                  Logistics & Pickups Coordinator
                 </h4>
               </div>
             </div>
@@ -550,6 +582,61 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
             </button>
           )}
         </div>
+
+        {/* List of active scheduled pickups with cancellation options directly inside Coordinator Panel */}
+        {scheduledPickups.filter((sp: any) => !inTransitPickups[sp.id]).length > 0 && (
+          <div className="space-y-3 p-4 bg-[#FAF8F5] rounded-xl border border-[#4A154B]/5">
+            <span className="text-[10px] uppercase font-extrabold text-[#4A154B]/70 tracking-wider block">
+              Active Scheduled Pickups (Awaiting Dispatch Collection)
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {scheduledPickups.filter((sp: any) => !inTransitPickups[sp.id]).map((pickup) => (
+                <div key={pickup.id} className="p-3 bg-white border border-[#4A154B]/10 rounded-xl space-y-1.5 text-xs text-[#1A1A1A]">
+                  <p className="font-bold flex items-center gap-1.5 text-[#4A154B]">
+                    <CheckCircle2 size={13} className="text-green-600" />
+                    Pickup ID: <span className="font-mono text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{pickup.id}</span>
+                  </p>
+                  <p className="text-[11px] text-[#1A1A1A]/70 font-semibold">
+                    Date & Slot: <strong className="text-[#4A154B] font-extrabold">{pickup.date}</strong> ({pickup.time === "10:00:00" ? "Morning Slot (10 AM - 1 PM)" : "Afternoon Slot (2 PM - 5 PM)"})
+                  </p>
+                  <p className="text-[11px] text-[#1A1A1A]/70 font-semibold">
+                    Packages linked: <strong className="text-green-700 font-extrabold">{pickup.ordersCount} (
+                      {pickup.orders.map((orderName: string, idx: number) => {
+                        const matchedOrder = initialOrders.find(o => o.name === orderName);
+                        return (
+                          <span key={orderName}>
+                            {idx > 0 && ", "}
+                            {matchedOrder ? (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedOrder(matchedOrder)}
+                                className="underline hover:text-green-700 font-extrabold focus:outline-none cursor-pointer inline bg-transparent border-none p-0 text-inherit"
+                              >
+                                {orderName}
+                              </button>
+                            ) : (
+                              <span>{orderName}</span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    )</strong>
+                  </p>
+                  <div className="pt-2 border-t border-gray-100 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleCancelPickup(pickup.id, pickup.orders)}
+                      disabled={cancellingPickupId === pickup.id}
+                      className="px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider font-extrabold bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 hover:text-rose-700 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {cancellingPickupId === pickup.id ? "Cancelling..." : "Cancel Pickup & Shipments"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Dynamic Section: Unfulfilled Orders Queue */}
         <div className="space-y-3">
@@ -585,7 +672,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                   <tbody className="divide-y divide-[#4A154B]/5 bg-white font-semibold">
                     {unfulfilledOrders.map((o) => {
                       const isChecked = !!selectedUnfulfilled[o.id];
-                      const dims = orderDimensions[o.id] || { weightGrams: "500", length: "30", width: "20", height: "5" };
+                      const dims = orderDimensions[o.id] || { weightGrams: "1000", length: "40", width: "30", height: "6" };
                       const customerName = `${o.shippingAddress?.firstName || o.customer?.firstName || "Customer"} ${o.shippingAddress?.lastName || o.customer?.lastName || ""}`.trim();
 
                       return (
@@ -690,7 +777,6 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                                     >
                                       <option value="">Select Partner</option>
                                       <option value="Delhivery">Delhivery</option>
-                                      <option value="Shiprocket">Shiprocket</option>
                                       <option value="Bluedart">Bluedart</option>
                                       <option value="DTDC">DTDC</option>
                                       <option value="India Post">India Post</option>
@@ -703,6 +789,16 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                                       <option value="Anjani">Anjani</option>
                                       <option value="Shree Maruti Courier">Shree Maruti Courier</option>
                                     </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] uppercase font-bold text-[#4A154B]/60 mb-1">Courier Cost (₹)</label>
+                                    <input
+                                      type="text"
+                                      value={customCourierCost}
+                                      onChange={(e) => setCustomCourierCost(e.target.value.replace(/\D/g, ""))}
+                                      placeholder="Enter Cost (e.g. 80)"
+                                      className="w-full h-8 px-2 rounded border border-[#4A154B]/15 bg-white text-xs outline-none focus:border-[#4A154B]"
+                                    />
                                   </div>
                                   <button
                                     type="button"
@@ -727,7 +823,7 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
               <div className="flex flex-col space-y-3 md:hidden">
                 {unfulfilledOrders.map((o) => {
                   const isChecked = !!selectedUnfulfilled[o.id];
-                  const dims = orderDimensions[o.id] || { weightGrams: "500", length: "30", width: "20", height: "5" };
+                  const dims = orderDimensions[o.id] || { weightGrams: "1000", length: "40", width: "30", height: "6" };
                   const customerName = `${o.shippingAddress?.firstName || o.customer?.firstName || "Customer"} ${o.shippingAddress?.lastName || o.customer?.lastName || ""}`.trim();
 
                   return (
@@ -830,7 +926,6 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                               >
                                 <option value="">Select Partner</option>
                                 <option value="Delhivery">Delhivery</option>
-                                <option value="Shiprocket">Shiprocket</option>
                                 <option value="Bluedart">Bluedart</option>
                                 <option value="DTDC">DTDC</option>
                                 <option value="India Post">India Post</option>
@@ -843,6 +938,16 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
                                 <option value="Anjani">Anjani</option>
                                 <option value="Shree Maruti Courier">Shree Maruti Courier</option>
                               </select>
+                            </div>
+                            <div>
+                              <label className="block text-[9px] uppercase font-bold text-[#4A154B]/60 mb-1">Courier Cost (₹)</label>
+                              <input
+                                type="text"
+                                value={customCourierCost}
+                                onChange={(e) => setCustomCourierCost(e.target.value.replace(/\D/g, ""))}
+                                placeholder="Enter Cost (e.g. 80)"
+                                className="w-full h-8 px-2 rounded border border-[#4A154B]/15 bg-white text-xs outline-none focus:border-[#4A154B]"
+                              />
                             </div>
                             <button
                               type="button"
@@ -938,63 +1043,6 @@ function OrdersListTableContent({ initialOrders, metaMap }: OrdersListTableProps
         </div>
 
 
-        {/* Scheduled Pickups Status */}
-        {scheduledPickups.filter((sp: any) => !inTransitPickups[sp.id]).length > 0 ? (
-          <div className="space-y-2.5 border-t border-[#4A154B]/5 pt-4">
-            <span className="text-[9px] uppercase font-bold text-[#4A154B]/55 tracking-wider block">
-              Active scheduled pickups for the day
-            </span>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {scheduledPickups.filter((sp: any) => !inTransitPickups[sp.id]).map((pickup) => (
-                <div key={pickup.id} className="p-3 bg-green-50/70 border border-green-200/50 rounded-xl space-y-1 text-xs text-green-800">
-                  <p className="font-bold flex items-center gap-1.5 text-green-700">
-                    <CheckCircle2 size={13} />
-                    Pickup ID: {pickup.id}
-                  </p>
-                  <p className="text-[10px] text-green-800/80">
-                    Date/Slot: <strong className="text-green-900">{pickup.date}</strong> ({pickup.time === "10:00:00" ? "Morning Slot (10 AM - 1 PM)" : "Afternoon Slot (2 PM - 5 PM)"})
-                  </p>
-                  <p className="text-[10px] text-green-800/80">
-                    Manifested Packages Linked: <strong className="text-green-900">{pickup.ordersCount} (
-                      {pickup.orders.map((orderName: string, idx: number) => {
-                        const matchedOrder = initialOrders.find(o => o.name === orderName);
-                        return (
-                          <span key={orderName}>
-                            {idx > 0 && ", "}
-                            {matchedOrder ? (
-                              <button
-                                type="button"
-                                onClick={() => setSelectedOrder(matchedOrder)}
-                                className="underline hover:text-green-700 font-bold focus:outline-none cursor-pointer inline bg-transparent border-none p-0 text-inherit"
-                              >
-                                {orderName}
-                              </button>
-                            ) : (
-                              <span>{orderName}</span>
-                            )}
-                          </span>
-                        );
-                      })}
-                    )</strong>
-                  </p>
-                  <div className="mt-2 p-1.5 bg-amber-50 text-amber-900 rounded-lg border border-amber-200 text-[10px] leading-relaxed">
-                    📌 <strong>Pack before:</strong> {pickup.time === "10:00:00" ? "09:30 AM" : "01:30 PM"} on {pickup.date}.
-                  </div>
-                  <div className="mt-3 pt-2.5 border-t border-green-200/40 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleCancelPickup(pickup.id, pickup.orders)}
-                      disabled={cancellingPickupId === pickup.id}
-                      className="px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider font-bold bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:text-red-700 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      {cancellingPickupId === pickup.id ? "Clearing..." : "Cancel / Clear Pickup"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         {/* Collapsible scheduler form drawer if there is an active pickup, but they want to schedule another one */}
         {scheduledPickups.length > 0 && showScheduler && (
@@ -1261,11 +1309,21 @@ function OrderEtaCell({ awb, courier, isManualFulfillment }: { awb: string, cour
   );
 }
 
-function LogisticsStatusBadge({ awb, courier, isManualFulfillment, tdClassName }: { awb: string, courier?: string, isManualFulfillment?: boolean, tdClassName?: string }) {
+function LogisticsStatusBadge({ order, awb, courier, isManualFulfillment, tdClassName }: { order: any, awb: string, courier?: string, isManualFulfillment?: boolean, tdClassName?: string }) {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Check if already delivered in tags or customAttributes to prevent API calls
+  const deliveryStatusAttr = order.customAttributes?.find((attr: any) => attr.key.toLowerCase() === "delivery_status");
+  const isDelivered = deliveryStatusAttr?.value === "delivered" || order.tags?.includes("delivery_status:delivered");
+
   reactUseEffect(() => {
+    if (isDelivered) {
+      setStatus("Delivered");
+      setLoading(false);
+      return;
+    }
+
     let active = true;
     fetch(`/api/orders/track?awb=${encodeURIComponent(awb)}&courier=${encodeURIComponent(courier || "")}&isManual=${!!isManualFulfillment}`)
       .then((res) => res.json())
@@ -1282,7 +1340,7 @@ function LogisticsStatusBadge({ awb, courier, isManualFulfillment, tdClassName }
     return () => {
       active = false;
     };
-  }, [awb, courier]);
+  }, [awb, courier, isDelivered]);
 
   const getBadgeStyle = (s: string) => {
     const norm = s.toLowerCase();
@@ -1429,7 +1487,7 @@ function MainOrderTableRow({
             {order.displayFulfillmentStatus === "FULFILLED" ? "Shipped" : "Processing"}
           </span>
           {awb && (
-            <LogisticsStatusBadge awb={awb} courier={courier} isManualFulfillment={isManualFulfillment} />
+            <LogisticsStatusBadge order={order} awb={awb} courier={courier} isManualFulfillment={isManualFulfillment} />
           )}
         </div>
       </td>
@@ -1445,7 +1503,6 @@ function MainOrderTableRow({
               className="h-7 w-full px-1.5 border border-[#4A154B]/20 rounded text-[11px] outline-none bg-white font-sans cursor-pointer"
             >
               <option value="Delhivery">Delhivery</option>
-              <option value="Shiprocket">Shiprocket</option>
               <option value="Bluedart">Bluedart</option>
               <option value="DTDC">DTDC</option>
             </select>

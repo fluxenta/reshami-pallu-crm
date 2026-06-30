@@ -1252,6 +1252,31 @@ export const shopifyOrder = {
       quantity: e.node.totalQuantity
     }));
 
+    // Function to resolve dynamic tracking URL for various Indian courier partners or general 17track aggregator
+    const getTrackingUrl = (companyName: string, awbNumber: string): string => {
+      const lower = companyName.toLowerCase();
+      if (lower.includes("delhivery")) {
+        return `https://track.delhivery.com/share/activity?awb=${awbNumber}`;
+      } else if (lower.includes("bluedart")) {
+        return `https://www.bluedart.com/web/guest/track-dart-surfacenew?trackId=${awbNumber}`;
+      } else if (lower.includes("dtdc")) {
+        return `https://www.dtdc.in/tracking/tracking_results.asp?SearchType=T&TrcType=A&heading=Tracking+Results&txtAction=track&lng=en&pinno=${awbNumber}`;
+      } else if (lower.includes("india post") || lower.includes("speed post")) {
+        return `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignments.aspx?consignmentNo=${awbNumber}`;
+      } else if (lower.includes("professional")) {
+        return `https://www.tpcglobe.co.in/tracking.aspx?awbno=${awbNumber}`;
+      } else if (lower.includes("maruti")) {
+        return `https://shreemaruticourier.com/`;
+      } else if (lower.includes("ekart")) {
+        return `https://ekartlogistics.com/track/${awbNumber}`;
+      } else if (lower.includes("xpressbees")) {
+        return `https://www.xpressbees.com/track?shipmentId=${awbNumber}`;
+      } else if (lower.includes("shadowfax")) {
+        return `https://www.shadowfax.in/track?awb=${awbNumber}`;
+      }
+      return `https://www.17track.net/en/track?nums=${awbNumber}`;
+    };
+
     const variables = {
       fulfillment: {
         lineItemsByFulfillmentOrder: [
@@ -1263,7 +1288,7 @@ export const shopifyOrder = {
         trackingInfo: {
           number: trackingNumber,
           company: trackingCarrier,
-          url: `https://track.delhivery.com/share/activity?awb=${trackingNumber}`
+          url: getTrackingUrl(trackingCarrier, trackingNumber)
         }
       }
     };

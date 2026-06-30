@@ -78,9 +78,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Book the shipment with Delhivery
+    // Append a unique short random suffix (e.g. -R1) to the cleanOrderName to bypass Delhivery's duplicate order ID rejection on re-manifesting.
     const cleanOrderName = (shopifyOrderName || orderName || orderId).replace(/^#/, "");
+    const uniqueOrderName = `${cleanOrderName}-R${Math.floor(10 + Math.random() * 90)}`;
+
     const booking = await bookShipmentWithDelhivery({
-      orderId: cleanOrderName,
+      orderId: uniqueOrderName,
       customerName,
       address: {
         line1: address1,
@@ -90,10 +93,10 @@ export async function POST(req: NextRequest) {
         pincode: zip,
         mobile: phone,
       },
-      weightKg: weight ? Number(weight) : 0.5,
-      length: length ? Number(length) : undefined,
-      width: width ? Number(width) : undefined,
-      height: height ? Number(height) : undefined,
+      weightKg: weight ? Number(weight) : 1.0,
+      length: length ? Number(length) : 40,
+      width: width ? Number(width) : 30,
+      height: height ? Number(height) : 6,
       packageDesc: packageDesc || undefined,
       products,
       totalPrice,
@@ -109,10 +112,10 @@ export async function POST(req: NextRequest) {
       try {
         actualCourierCost = await getDelhiveryCharges(
           zip,
-          weight ? Number(weight) : 0.5,
-          length ? Number(length) : undefined,
-          width ? Number(width) : undefined,
-          height ? Number(height) : undefined
+          weight ? Number(weight) : 1.0,
+          length ? Number(length) : 40,
+          width ? Number(width) : 30,
+          height ? Number(height) : 6
         );
         console.log(`[Fulfill] Calculated actual courier cost for AWB ${booking.awb}: ₹${actualCourierCost}`);
       } catch (err) {

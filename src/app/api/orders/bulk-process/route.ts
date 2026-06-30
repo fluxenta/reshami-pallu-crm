@@ -96,10 +96,11 @@ export async function POST(req: NextRequest) {
 
         const totalPrice = parseFloat(orderObj.totalPriceSet?.presentmentMoney?.amount || "0");
         const cleanOrderName = (orderObj.name || orderId).replace(/^#/, "");
+        const uniqueOrderName = `${cleanOrderName}-R${Math.floor(10 + Math.random() * 90)}`;
 
         // Book with Delhivery
         const booking = await bookShipmentWithDelhivery({
-          orderId: cleanOrderName,
+          orderId: uniqueOrderName,
           customerName,
           address: {
             line1: address1,
@@ -130,10 +131,10 @@ export async function POST(req: NextRequest) {
         try {
           actualCourierCost = await getDelhiveryCharges(
             zip,
-            weightKg,
-            length ? Number(length) : undefined,
-            width ? Number(width) : undefined,
-            height ? Number(height) : undefined
+            weightKg > 0 ? weightKg : 1.0,
+            length ? Number(length) : 40,
+            width ? Number(width) : 30,
+            height ? Number(height) : 6
           );
         } catch (err) {
           console.error(`Failed to estimate charges for ${booking.awb}:`, err);

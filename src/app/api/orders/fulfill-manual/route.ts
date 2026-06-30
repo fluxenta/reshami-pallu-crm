@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
     let note = order.note || "";
 
     if (action === "dispatch") {
+      const { courierCost } = body;
       if (!awb || !courierPartner) {
         return NextResponse.json({ error: "AWB and Courier Partner are required for dispatching" }, { status: 400 });
       }
@@ -106,6 +107,31 @@ export async function POST(req: NextRequest) {
           quantity: e.node.totalQuantity
         }));
 
+        // Dynamic URL resolution for Shopify tracking link
+        const getTrackingUrl = (companyName: string, awbNumber: string): string => {
+          const lower = companyName.toLowerCase();
+          if (lower.includes("delhivery")) {
+            return `https://track.delhivery.com/share/activity?awb=${awbNumber}`;
+          } else if (lower.includes("bluedart")) {
+            return `https://www.bluedart.com/web/guest/track-dart-surfacenew?trackId=${awbNumber}`;
+          } else if (lower.includes("dtdc")) {
+            return `https://www.dtdc.in/tracking/tracking_results.asp?SearchType=T&TrcType=A&heading=Tracking+Results&txtAction=track&lng=en&pinno=${awbNumber}`;
+          } else if (lower.includes("india post") || lower.includes("speed post")) {
+            return `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignments.aspx?consignmentNo=${awbNumber}`;
+          } else if (lower.includes("professional")) {
+            return `https://www.tpcglobe.co.in/tracking.aspx?awbno=${awbNumber}`;
+          } else if (lower.includes("maruti")) {
+            return `https://shreemaruticourier.com/`;
+          } else if (lower.includes("ekart")) {
+            return `https://ekartlogistics.com/track/${awbNumber}`;
+          } else if (lower.includes("xpressbees")) {
+            return `https://www.xpressbees.com/track?shipmentId=${awbNumber}`;
+          } else if (lower.includes("shadowfax")) {
+            return `https://www.shadowfax.in/track?awb=${awbNumber}`;
+          }
+          return `https://www.17track.net/en/track?nums=${awbNumber}`;
+        };
+
         const fulfillmentRes = await shopifyAdminFetch<any>({
           query: FULFILLMENT_CREATE,
           variables: {
@@ -119,9 +145,7 @@ export async function POST(req: NextRequest) {
               trackingInfo: {
                 number: awb,
                 company: courierPartner,
-                url: courierPartner.toLowerCase() === "delhivery"
-                  ? `https://track.delhivery.com/share/activity?awb=${awb}`
-                  : `https://www.17track.net/en/track?nums=${awb}`
+                url: getTrackingUrl(courierPartner, awb)
               }
             }
           }
@@ -147,6 +171,19 @@ export async function POST(req: NextRequest) {
       customAttributes.push({ key: "awb", value: awb });
       customAttributes.push({ key: "courier_partner", value: courierPartner });
       customAttributes.push({ key: "delivery_status", value: "dispatched" });
+
+      if (courierCost !== undefined && Number(courierCost) >= 0) {
+        const costVal = Number(courierCost);
+        if (/Courier Cost:\s*₹[\d.]+/i.test(note)) {
+          note = note.replace(/Courier Cost:\s*₹[\d.]+/i, `Courier Cost: ₹${costVal}`);
+        } else {
+          if (note.trim()) {
+            note = `${note}, Courier Cost: ₹${costVal}`;
+          } else {
+            note = `Courier Cost: ₹${costVal}`;
+          }
+        }
+      }
 
       if (!note.includes(`AWB: ${awb}`)) {
         note = `AWB: ${awb}\n${note}`;

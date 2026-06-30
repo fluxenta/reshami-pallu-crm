@@ -188,8 +188,10 @@ export async function bookShipmentWithDelhivery(
           country: "India",
           phone: address.mobile,
           order: orderId,
-          payment_mode: "Pre-paid",
+          payment_mode: "Prepaid",
+          shipping_mode: "Express",
           package_desc: packageDesc || "Premium Indian Saree & Ethnic Wear",
+          products_desc: packageDesc || "Premium Indian Saree & Ethnic Wear",
           package_type: "box",
           weight: Math.round(weightKg * 1000), // weight in grams
           cod_amount: 0,
@@ -198,6 +200,7 @@ export async function bookShipmentWithDelhivery(
           shipment_height: height > 0 ? height : undefined,
           client: "6d2d07-RESHMIPALLU-do",
           products: products.length > 0 ? products : undefined,
+          total_amount: totalPrice > 0 ? totalPrice : undefined,
           declared_value: totalPrice > 0 ? totalPrice : undefined,
         },
       ],
@@ -283,6 +286,51 @@ export interface PickupResult {
   pickupTime?: string;
   status?: string;
   error?: string;
+}
+
+export async function cancelShipmentWithDelhivery(awbCode: string): Promise<{ success: boolean; error?: string }> {
+  const token = process.env.DELHIVERY_API_TOKEN || "";
+  if (!token) {
+    return { success: false, error: "Delhivery API Token is not configured." };
+  }
+
+  try {
+    const baseUrl = getBaseUrl();
+    const payload = {
+      waybill: awbCode,
+      cancellation: "true"
+    };
+
+    const res = await fetch(`${baseUrl}/api/p/edit`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Token ${token}`
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      cache: "no-store"
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Delhivery API returned status ${res.status}: ${text}`);
+    }
+
+    const response = await res.json() as any;
+    if (response?.status === "Fail" || response?.success === false) {
+      throw new Error(response?.error || response?.rmk || "Cancellation rejected by Delhivery.");
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Delhivery waybill cancellation failed:", err);
+    return {
+      success: false,
+      error: err.message || "Cancellation failed."
+    };
+  }
 }
 
 export async function schedulePickupWithDelhivery(

@@ -417,7 +417,7 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
             </div>
           </div>
 
-          {/* Logistics & Tracking (Delhivery / Shiprocket) */}
+          {/* Logistics & Tracking (Delhivery) */}
           {awb && (
             <div className="bg-white rounded-2xl p-5 border border-[#4A154B]/10 shadow-sm space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#4A154B]/5 pb-2.5 mb-4">
@@ -450,6 +450,31 @@ export default function OrderDetailModal({ order, metaMap, onClose }: OrderDetai
                     title="Refresh timeline"
                   >
                     <RefreshCw size={13} className={loadingTracking ? "animate-spin" : ""} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm("Are you sure you want to cancel this shipment from Delhivery and Shopify/CRM?")) return;
+                      try {
+                        const res = await fetch("/api/orders/cancel", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ orderId: order.id })
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                          alert(data.message || "Shipment successfully cancelled!");
+                          window.location.reload();
+                        } else {
+                          alert(data.error || "Failed to cancel shipment.");
+                        }
+                      } catch (err) {
+                        alert("Network error occurred.");
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 px-3 py-1 rounded-lg transition-all cursor-pointer"
+                  >
+                    Cancel Shipment
                   </button>
                 </div>
               </div>

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTrackingByAwb as getDelhiveryTracking } from "@/lib/delhivery";
-import { getShiprocketTracking } from "@/lib/shiprocket";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -9,26 +8,13 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const awb = searchParams.get("awb") || "";
-    const courier = (searchParams.get("courier") || "").toLowerCase().trim();
     const isManual = searchParams.get("isManual") === "true";
 
     if (!awb) {
       return NextResponse.json({ error: "AWB code is required" }, { status: 400 });
     }
 
-    let tracking = null;
-
-    if (courier === "shiprocket") {
-      tracking = await getShiprocketTracking(awb);
-    } else if (courier === "delhivery") {
-      tracking = await getDelhiveryTracking(awb, isManual);
-    } else {
-      // Automatic fallback lookup
-      tracking = await getDelhiveryTracking(awb, isManual);
-      if (!tracking) {
-        tracking = await getShiprocketTracking(awb);
-      }
-    }
+    const tracking = await getDelhiveryTracking(awb, isManual);
 
     if (!tracking) {
       // Return a graceful fallback instead of failing with 404
